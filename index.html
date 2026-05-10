@@ -19,6 +19,8 @@
   <header id="topbar">
     <div class="logo">SunStar <span>Pattern Editor</span></div>
     <div class="topbar-actions">
+      <input type="file" id="inp-image" accept="image/*" style="display:none">
+      <button class="btn-sm" id="btn-import-img" title="이미지 불러오기">📷 이미지 불러오기</button>
       <button class="btn-sm" id="btn-undo" title="되돌리기 (Ctrl+Z)">↩ 되돌리기</button>
       <button class="btn-sm" id="btn-redo" title="다시하기 (Ctrl+Y)">↪ 다시하기</button>
       <button class="btn-sm btn-danger" id="btn-clear-all">🗑 전체삭제</button>
@@ -31,8 +33,11 @@
     <button class="tool-btn" data-tool="hand"><span>✋</span><span class="tooltip">이동 (H)</span></button>
     <button class="tool-btn" data-tool="eraser"><span>🧹</span><span class="tooltip">지우기 (E)</span></button>
     <div class="tool-divider"></div>
+    <button class="tool-btn" data-tool="node"><span>📍</span><span class="tooltip">노드편집 (N)</span></button>
+    <div class="tool-divider"></div>
     <button class="tool-btn" data-tool="line"><span>📏</span><span class="tooltip">직선 (L)</span></button>
     <button class="tool-btn" data-tool="curve"><span>🖌</span><span class="tooltip">곡선 (C)</span></button>
+    <button class="tool-btn" data-tool="pulse"><span>📈</span><span class="tooltip">지그재그선 (Z)</span></button>
     <button class="tool-btn" data-tool="rect"><span>⬜</span><span class="tooltip">사각형 (R)</span></button>
     <button class="tool-btn" data-tool="ellipse"><span>⭕</span><span class="tooltip">원 (O)</span></button>
     <button class="tool-btn" data-tool="polygon"><span>🔷</span><span class="tooltip">다각형 (P)</span></button>
@@ -74,6 +79,18 @@
         <button class="stitch-btn" data-stitch="running">── 러닝</button>
         <button class="stitch-btn" data-stitch="satin">≋ 새틴</button>
         <button class="stitch-btn" data-stitch="fill">▦ 채우기</button>
+      </div>
+    </div>
+    <div class="prop-group">
+      <div class="panel-title">🔄 변형 (Transform)</div>
+      <div class="stitch-selector" style="margin-bottom: 8px;">
+        <button class="stitch-btn" id="btn-flip-h">↔ 좌우 반전</button>
+        <button class="stitch-btn" id="btn-flip-v">↕ 상하 반전</button>
+      </div>
+      <div class="stitch-selector">
+        <button class="stitch-btn" id="btn-rotate-ccw">↺ -90°</button>
+        <button class="stitch-btn" id="btn-rotate-cw">↻ +90°</button>
+        <button class="stitch-btn" id="btn-mirror-copy" title="대칭 복사">◨ 대칭 복사</button>
       </div>
     </div>
     <div class="prop-group">
@@ -119,7 +136,10 @@
   <footer id="statusbar">
     <span id="status-tool">도구: 선택</span>
     <span id="status-objs">오브젝트: 0</span>
-    <span>스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
+    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
+      <input type="checkbox" id="chk-snap" checked> 스냅 (1mm)
+    </label>
+    <span style="margin-left:auto">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
   </footer>
 </div>
 

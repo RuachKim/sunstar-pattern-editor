@@ -34,7 +34,11 @@ resizeCanvas();
 
 // ─── Helpers ───
 function uid() { return Math.random().toString(36).slice(2, 10); }
-function snap(v) { return Math.round(v / 20) * 20; }
+function snap(v) {
+  const chk = document.getElementById('chk-snap');
+  const snapVal = chk && chk.checked ? 10 : 1;
+  return Math.round(v / snapVal) * snapVal;
+}
 function s2w(sx, sy) { return { x: (sx - cv.width / 2) / state.cam.z + state.cam.x, y: (sy - cv.height / 2) / state.cam.z + state.cam.y }; }
 function w2s(wx, wy) { return { x: (wx - state.cam.x) * state.cam.z + cv.width / 2, y: (wy - state.cam.y) * state.cam.z + cv.height / 2 }; }
 function bbox(pts) {
@@ -150,16 +154,25 @@ function drawObj(o, idx) {
   ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.3)';
   ctx.fillText({ running: 'Run', satin: 'Satin', fill: 'Fill' }[o.stitch] || '', bs.x, bs.y - 4);
 
-  // Selection highlight
-  if (idx === state.selectedIdx && state.tool === 'select') {
-    const s1 = w2s(b.x1, b.y1), s2 = w2s(b.x2, b.y2);
-    ctx.strokeStyle = '#4361ee'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
-    ctx.strokeRect(s1.x - 4, s1.y - 4, s2.x - s1.x + 8, s2.y - s1.y + 8);
-    ctx.setLineDash([]);
-    for (const h of [s1, { x: s2.x, y: s1.y }, s2, { x: s1.x, y: s2.y }]) {
-      ctx.fillStyle = '#fff'; ctx.strokeStyle = '#4361ee'; ctx.lineWidth = 1.5;
-      ctx.fillRect(h.x - 5, h.y - 5, 10, 10);
-      ctx.strokeRect(h.x - 5, h.y - 5, 10, 10);
+  // Selection highlight / Nodes
+  if (idx === state.selectedIdx) {
+    if (state.tool === 'select') {
+      const s1 = w2s(b.x1, b.y1), s2 = w2s(b.x2, b.y2);
+      ctx.strokeStyle = '#4361ee'; ctx.lineWidth = 1; ctx.setLineDash([4, 3]);
+      ctx.strokeRect(s1.x - 4, s1.y - 4, s2.x - s1.x + 8, s2.y - s1.y + 8);
+      ctx.setLineDash([]);
+      for (const h of [s1, { x: s2.x, y: s1.y }, s2, { x: s1.x, y: s2.y }]) {
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#4361ee'; ctx.lineWidth = 1.5;
+        ctx.fillRect(h.x - 5, h.y - 5, 10, 10);
+        ctx.strokeRect(h.x - 5, h.y - 5, 10, 10);
+      }
+    } else if (state.tool === 'node') {
+      // Draw nodes
+      for (let j = 0; j < pts.length; j++) {
+        const p = w2s(pts[j].x, pts[j].y);
+        ctx.fillStyle = '#fff'; ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      }
     }
   }
 }
@@ -233,10 +246,26 @@ cv.addEventListener('mousedown', e => {
     }
     state.selectedIdx = -1;
     render(); updateUI();
+  } else if (state.tool === 'node') {
+    if (state.selectedIdx >= 0) {
+      const pts = state.objects[state.selectedIdx].points;
+      for (let i = 0; i < pts.length; i++) {
+        const p = w2s(pts[i].x, pts[i].y);
+        if (Math.hypot(mx - p.x, my - p.y) < 8) {
+          drag = { t: 'node', nodeIdx: i };
+          saveUndo();
+          return;
+        }
+      }
+    }
+    // Select object if node not hit
+    const oi = hitObj(mx, my);
+    state.selectedIdx = oi >= 0 ? oi : -1;
+    render(); updateUI();
   } else if (state.tool === 'eraser') {
     const oi = hitObj(mx, my);
     if (oi >= 0) { saveUndo(); state.objects.splice(oi, 1); if (state.selectedIdx >= state.objects.length) state.selectedIdx = -1; render(); updateUI(); }
-  } else if (state.tool === 'line' || state.tool === 'polygon') {
+  } else if (state.tool === 'line' || state.tool === 'polygon' || state.tool === 'pulse') {
     if (!drawPts) drawPts = [];
     drawPts.push({ x: sw, y: sh });
     render();
@@ -258,12 +287,16 @@ cv.addEventListener('mousemove', e => {
     render(); return;
   }
 
-  if (state.tool === 'select' && drag) {
+  if (state.tool === 'select' && drag && drag.t === 'move') {
     const dx = snap(w.x - drag.wx), dy = snap(w.y - drag.wy);
     for (let j = 0; j < drag.orig.length; j++) {
       state.objects[state.selectedIdx].points[j].x = drag.orig[j].x + dx;
       state.objects[state.selectedIdx].points[j].y = drag.orig[j].y + dy;
     }
+    render();
+  } else if (state.tool === 'node' && drag && drag.t === 'node') {
+    state.objects[state.selectedIdx].points[drag.nodeIdx].x = snap(w.x);
+    state.objects[state.selectedIdx].points[drag.nodeIdx].y = snap(w.y);
     render();
   } else if (state.tool === 'curve' && curving) {
     drawPts.push({ x: w.x, y: w.y });
@@ -276,7 +309,7 @@ cv.addEventListener('mousemove', e => {
 
 cv.addEventListener('mouseup', e => {
   if (panning) { panning = false; cv.style.cursor = state.tool === 'hand' ? 'grab' : 'default'; return; }
-  if (state.tool === 'select' && drag) { drag = null; render(); return; }
+  if (drag) { drag = null; render(); return; }
 
   if (state.tool === 'curve' && curving) {
     curving = false;
@@ -314,10 +347,35 @@ cv.addEventListener('mouseup', e => {
 });
 
 cv.addEventListener('dblclick', () => {
-  if ((state.tool === 'line' || state.tool === 'polygon') && drawPts && drawPts.length > 1) {
+  if ((state.tool === 'line' || state.tool === 'polygon' || state.tool === 'pulse') && drawPts && drawPts.length > 1) {
     saveUndo();
     if (state.tool === 'polygon') drawPts.push({ x: drawPts[0].x, y: drawPts[0].y });
-    state.objects.push({ id: uid(), type: state.tool, points: drawPts, stitch: state.tool === 'polygon' ? 'fill' : 'running', density: 2, angle: 0, color: '#4361ee', name: state.tool === 'polygon' ? '다각형' : '직선' });
+    
+    let finalPts = drawPts;
+    if (state.tool === 'pulse') {
+      finalPts = [];
+      const density = 20; // 2mm zigzag
+      const amp = 30; // 3mm height
+      for (let i = 0; i < drawPts.length - 1; i++) {
+        const p1 = drawPts[i], p2 = drawPts[i+1];
+        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        const steps = Math.max(2, Math.floor(dist / density));
+        const dx = (p2.x - p1.x) / steps, dy = (p2.y - p1.y) / steps;
+        const nx = -dy / (dist/steps || 1) * amp, ny = dx / (dist/steps || 1) * amp;
+        
+        for (let j = 0; j <= steps; j++) {
+          const cx = p1.x + dx * j, cy = p1.y + dy * j;
+          if (j % 2 !== 0 && j !== steps) {
+            finalPts.push({ x: cx + nx, y: cy + ny });
+          } else {
+            finalPts.push({ x: cx, y: cy });
+          }
+        }
+      }
+    }
+    
+    const typeNames = { line: '직선', polygon: '다각형', pulse: '지그재그선' };
+    state.objects.push({ id: uid(), type: state.tool, points: finalPts, stitch: state.tool === 'polygon' ? 'fill' : 'running', density: 2, angle: 0, color: '#4361ee', name: typeNames[state.tool] });
     drawPts = null; render(); updateUI();
   }
 });
@@ -356,7 +414,7 @@ document.addEventListener('keydown', e => {
 function setTool(t) {
   state.tool = t;
   document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
-  document.getElementById('status-tool').textContent = `도구: ${{ select: '선택', hand: '이동', eraser: '지우기', line: '직선', curve: '곡선', rect: '사각형', ellipse: '원', polygon: '다각형' }[t] || t}`;
+  document.getElementById('status-tool').textContent = `도구: ${{ select: '선택', node: '노드편집', hand: '이동', eraser: '지우기', line: '직선', curve: '곡선', pulse: '지그재그선', rect: '사각형', ellipse: '원', polygon: '다각형' }[t] || t}`;
   render();
 }
 
@@ -474,6 +532,154 @@ document.getElementById('btn-export').addEventListener('click', () => {
   if (state.objects.length === 0) return;
   const { stitches } = StitchEngine.objectsToDSTStitches(state.objects, state.maxStitchLen);
   DSTWriter.download(stitches, 'PATTERN.DST');
+});
+
+// ─── Transformer ───
+function transformSelected(type) {
+  if (state.selectedIdx < 0) return;
+  saveUndo();
+  const obj = state.objects[state.selectedIdx];
+  const b = bbox(obj.points);
+  const cx = (b.x1 + b.x2) / 2;
+  const cy = (b.y1 + b.y2) / 2;
+
+  obj.points.forEach(p => {
+    let nx = p.x, ny = p.y;
+    if (type === 'flip-h') {
+      nx = cx - (p.x - cx);
+    } else if (type === 'flip-v') {
+      ny = cy - (p.y - cy);
+    } else if (type === 'rot-cw') {
+      nx = cx - (p.y - cy);
+      ny = cy + (p.x - cx);
+    } else if (type === 'rot-ccw') {
+      nx = cx + (p.y - cy);
+      ny = cy - (p.x - cx);
+    }
+    p.x = nx; p.y = ny;
+  });
+  render(); updateUI();
+}
+
+document.getElementById('btn-flip-h').addEventListener('click', () => transformSelected('flip-h'));
+document.getElementById('btn-flip-v').addEventListener('click', () => transformSelected('flip-v'));
+document.getElementById('btn-rotate-cw').addEventListener('click', () => transformSelected('rot-cw'));
+document.getElementById('btn-rotate-ccw').addEventListener('click', () => transformSelected('rot-ccw'));
+
+document.getElementById('btn-mirror-copy').addEventListener('click', () => {
+  if (state.selectedIdx < 0) return;
+  saveUndo();
+  const obj = state.objects[state.selectedIdx];
+  const b = bbox(obj.points);
+  
+  // Clone object
+  const newObj = JSON.parse(JSON.stringify(obj));
+  newObj.id = uid();
+  newObj.name = (obj.name || obj.type) + ' (대칭)';
+  
+  // Mirror across the right edge (x2)
+  newObj.points.forEach(p => {
+    p.x = b.x2 + (b.x2 - p.x);
+  });
+  
+  state.objects.push(newObj);
+  state.selectedIdx = state.objects.length - 1; // select the new copy
+  render(); updateUI();
+});
+
+// ─── Image Vectorizer (Sketch-to-Pattern) ───
+document.getElementById('btn-import-img').addEventListener('click', () => document.getElementById('inp-image').click());
+
+document.getElementById('inp-image').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = new Image();
+    img.onload = () => {
+      // 1. Offscreen canvas & Scale down for processing
+      const maxDim = 150; // max size for processing
+      const scale = Math.min(maxDim / img.width, maxDim / img.height);
+      const w = Math.round(img.width * scale);
+      const h = Math.round(img.height * scale);
+      const ocv = document.createElement('canvas');
+      ocv.width = w; ocv.height = h;
+      const octx = ocv.getContext('2d');
+      octx.drawImage(img, 0, 0, w, h);
+      
+      const imgData = octx.getImageData(0, 0, w, h);
+      const data = imgData.data;
+      const points = [];
+      
+      // 2. Thresholding & Extract dark pixels
+      let minVal = 255;
+      for (let i = 0; i < data.length; i += 4) {
+        const v = (data[i] + data[i+1] + data[i+2]) / 3;
+        if (v < minVal) minVal = v;
+      }
+      const thresh = Math.min(200, minVal + 50); // adaptive threshold offset
+      
+      for (let y = 0; y < h; y += 2) { // step by 2 for faster processing and thinning
+        for (let x = 0; x < w; x += 2) {
+          const idx = (y * w + x) * 4;
+          const v = (data[idx] + data[idx+1] + data[idx+2]) / 3;
+          if (v < thresh) {
+            // center to canvas, scaled up
+            points.push({
+              x: (x - w/2) * 5,
+              y: (y - h/2) * 5,
+              visited: false
+            });
+          }
+        }
+      }
+      
+      if (points.length < 2) return;
+      
+      // 3. TSP-like nearest neighbor connection
+      const path = [points[0]];
+      points[0].visited = true;
+      let curr = points[0];
+      
+      for (let i = 1; i < points.length; i++) {
+        let minDist = Infinity;
+        let bestIdx = -1;
+        // Search a local window first for speed, fallback to all
+        let searchLimit = Math.min(points.length, 300);
+        for (let j = 0; j < points.length; j++) {
+          if (!points[j].visited) {
+            const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y);
+            if (d < minDist) { minDist = d; bestIdx = j; }
+          }
+        }
+        if (bestIdx !== -1) {
+          points[bestIdx].visited = true;
+          curr = points[bestIdx];
+          path.push(curr);
+        }
+      }
+      
+      // 4. Simplify path
+      const optimized = rdp(path, 6.0); // 6.0 tolerance
+      
+      saveUndo();
+      state.objects.push({
+        id: uid(),
+        type: 'sketch',
+        points: optimized,
+        stitch: 'running',
+        density: 2,
+        angle: 0,
+        color: '#4361ee',
+        name: '스케치 변환'
+      });
+      
+      document.getElementById('inp-image').value = '';
+      render(); updateUI();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
 });
 
 // ─── Init ───
