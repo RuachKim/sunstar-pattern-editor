@@ -105,13 +105,13 @@ function chaikin(pts, n) {
 // ─── Rendering ───
 function drawGrid() {
   const W = cv.width, H = cv.height;
-  ctx.fillStyle = '#0d0d1a'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, W, H);
   const gz = 20 * state.cam.z;
   if (gz < 3) return;
   const ox = W / 2 - state.cam.x * state.cam.z;
   const oy = H / 2 - state.cam.y * state.cam.z;
 
-  ctx.strokeStyle = gz > 8 ? 'rgba(255,255,255,.04)' : 'rgba(255,255,255,.02)';
+  ctx.strokeStyle = gz > 8 ? 'rgba(0,0,0,.05)' : 'rgba(0,0,0,.02)';
   ctx.lineWidth = 0.5;
   let sx = ox % gz; while (sx < 0) sx += gz;
   for (let x = sx; x < W; x += gz) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
@@ -119,7 +119,7 @@ function drawGrid() {
   for (let y = sy; y < H; y += gz) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
   const gz5 = gz * 5;
-  ctx.strokeStyle = 'rgba(255,255,255,.08)'; ctx.lineWidth = 0.5;
+  ctx.strokeStyle = 'rgba(0,0,0,.1)'; ctx.lineWidth = 0.5;
   let sx5 = ox % gz5; while (sx5 < 0) sx5 += gz5;
   for (let x = sx5; x < W; x += gz5) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   let sy5 = oy % gz5; while (sy5 < 0) sy5 += gz5;
@@ -127,9 +127,9 @@ function drawGrid() {
 
   // Origin axes
   const o = w2s(0, 0);
-  ctx.strokeStyle = 'rgba(231,76,60,.35)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(231,76,60,.5)'; ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.stroke();
-  ctx.strokeStyle = 'rgba(46,204,113,.35)';
+  ctx.strokeStyle = 'rgba(46,204,113,.5)';
   ctx.beginPath(); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
 }
 
@@ -151,7 +151,7 @@ function drawObj(o, idx) {
   // Label
   const b = bbox(pts);
   const bs = w2s(b.x1, b.y1);
-  ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(255,255,255,.3)';
+  ctx.font = '9px sans-serif'; ctx.fillStyle = 'rgba(0,0,0,.5)';
   ctx.fillText({ running: 'Run', satin: 'Satin', fill: 'Fill' }[o.stitch] || '', bs.x, bs.y - 4);
 
   // Selection highlight / Nodes

@@ -1,20 +1,20 @@
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700&display=swap');
 
 :root {
-  --bg-primary: #0f0f1a;
-  --bg-secondary: #1a1a2e;
-  --bg-panel: #16213e;
-  --bg-card: #1e2a4a;
+  --bg-primary: #f8f9fa;
+  --bg-secondary: #ffffff;
+  --bg-panel: #f1f3f5;
+  --bg-card: #e9ecef;
   --accent: #4361ee;
   --accent-hover: #3a56d4;
   --accent-glow: rgba(67, 97, 238, 0.3);
   --success: #2ecc71;
   --warning: #f39c12;
   --danger: #e74c3c;
-  --text-primary: #e8e8f0;
-  --text-secondary: #8892b0;
-  --text-muted: #5a6380;
-  --border: rgba(255,255,255,0.06);
+  --text-primary: #212529;
+  --text-secondary: #495057;
+  --text-muted: #868e96;
+  --border: rgba(0,0,0,0.1);
   --border-active: rgba(67, 97, 238, 0.5);
   --radius: 10px;
   --radius-sm: 6px;
@@ -205,7 +205,7 @@ body {
   border: 1px solid transparent;
 }
 
-.obj-item:hover { background: rgba(255,255,255,0.03); }
+.obj-item:hover { background: rgba(0,0,0,0.03); }
 
 .obj-item.selected {
   background: rgba(67, 97, 238, 0.12);
