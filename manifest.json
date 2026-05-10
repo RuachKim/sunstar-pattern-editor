@@ -1,0 +1,14 @@
+{
+  "name": "선스타 패턴 에디터",
+  "short_name": "패턴에디터",
+  "description": "선스타 KM-2080P 자수 패턴 에디터",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0f0f1a",
+  "theme_color": "#0f0f1a",
+  "orientation": "landscape",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
