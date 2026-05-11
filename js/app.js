@@ -12,8 +12,49 @@ const state = {
   maxStitchLen: 30,
 };
 
-let drag = null, drawPts = null, drawStart = null, curving = false;
+let drag = null, drawPts = null, drawStart = null, tempPos = null;
 let panning = false, panStart = null;
+
+const guides = {
+  line: "시작점과 끝점을 찍으세요.",
+  arch: "양 끝점을 찍고, 굽은 정도를 정하세요.",
+  circle: "중심을 찍고 크기만큼 당기세요.",
+  rect: "양쪽 모서리 두 곳을 찍으세요.",
+  pulse: "시작과 끝을 찍으면 계단이 생깁니다.",
+  curve: "원하는 모양대로 점을 계속 찍으세요. (더블클릭/시작점 클릭으로 종료)",
+  select: "오브젝트를 선택하세요.",
+  hand: "화면을 드래그하여 이동하세요.",
+  eraser: "지울 오브젝트를 클릭하세요.",
+  node: "오브젝트의 노드를 이동하세요."
+};
+
+function getArch(p0, p1, p2) {
+  let pts = [];
+  for(let i=0; i<=20; i++) {
+    let t = i/20, inv = 1-t;
+    let x = inv*inv*p0.x + 2*inv*t*p2.x + t*t*p1.x;
+    let y = inv*inv*p0.y + 2*inv*t*p2.y + t*t*p1.y;
+    pts.push({x,y});
+  }
+  return pts;
+}
+
+function getPulse(p0, p1) {
+  let dx = p1.x - p0.x, dy = p1.y - p0.y;
+  let len = Math.hypot(dx, dy);
+  if(len < 1) return [p0, p1];
+  let ux = dx/len, uy = dy/len, nx = -uy, ny = ux;
+  let pts = [];
+  let steps = Math.max(3, Math.floor(len / 10));
+  for(let i=0; i<steps; i++) {
+    let t1 = i/steps, t2 = (i+1)/steps;
+    pts.push({x: p0.x + dx*t1, y: p0.y + dy*t1});
+    pts.push({x: p0.x + dx*t1 + nx*10, y: p0.y + dy*t1 + ny*10});
+    pts.push({x: p0.x + dx*t2 + nx*10, y: p0.y + dy*t2 + ny*10});
+    pts.push({x: p0.x + dx*t2, y: p0.y + dy*t2});
+  }
+  return pts;
+}
 
 // ─── DOM refs ───
 const cv = document.getElementById('c');
@@ -181,32 +222,52 @@ function render() {
   drawGrid();
   for (let i = 0; i < state.objects.length; i++) drawObj(state.objects[i], i);
 
-  // Drawing preview
   if (drawPts && drawPts.length > 0) {
+    let pts = [...drawPts];
+    if (tempPos && state.tool !== 'circle') pts.push(tempPos);
     ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
     ctx.beginPath();
-    let sp = w2s(drawPts[0].x, drawPts[0].y);
-    ctx.moveTo(sp.x, sp.y);
-    for (let i = 1; i < drawPts.length; i++) { sp = w2s(drawPts[i].x, drawPts[i].y); ctx.lineTo(sp.x, sp.y); }
+    
+    if (state.tool === 'line' || state.tool === 'curve') {
+      let sp = w2s(pts[0].x, pts[0].y); ctx.moveTo(sp.x, sp.y);
+      for (let i = 1; i < pts.length; i++) { let ep = w2s(pts[i].x, pts[i].y); ctx.lineTo(ep.x, ep.y); }
+    } else if (state.tool === 'arch') {
+      if (drawPts.length === 1 && tempPos) {
+        let p0 = w2s(pts[0].x, pts[0].y), p1 = w2s(tempPos.x, tempPos.y);
+        ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y);
+      } else if (drawPts.length === 2 && tempPos) {
+        let arch = getArch(drawPts[0], drawPts[1], tempPos);
+        let s0 = w2s(arch[0].x, arch[0].y); ctx.moveTo(s0.x, s0.y);
+        for(let i=1; i<arch.length; i++) { let sp = w2s(arch[i].x, arch[i].y); ctx.lineTo(sp.x, sp.y); }
+      }
+    } else if (state.tool === 'rect') {
+      if (pts.length > 1) {
+        let p0 = w2s(pts[0].x, pts[0].y), p1 = w2s(pts[1].x, pts[1].y);
+        ctx.strokeRect(p0.x, p0.y, p1.x - p0.x, p1.y - p0.y);
+      }
+    } else if (state.tool === 'pulse') {
+      if (pts.length > 1) {
+        let pulse = getPulse(pts[0], pts[1]);
+        let s0 = w2s(pulse[0].x, pulse[0].y); ctx.moveTo(s0.x, s0.y);
+        for(let i=1; i<pulse.length; i++) { let sp = w2s(pulse[i].x, pulse[i].y); ctx.lineTo(sp.x, sp.y); }
+      }
+    }
     ctx.stroke();
   }
 
-  if (drawStart) {
-    ctx.strokeStyle = 'rgba(46,204,113,.5)'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
-    if (state.tool === 'rect') {
-      const s1 = w2s(drawStart.sx, drawStart.sy), s2 = w2s(drawStart.cx, drawStart.cy);
-      ctx.strokeRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
-    } else if (state.tool === 'ellipse') {
-      const s1 = w2s(drawStart.sx, drawStart.sy), s2 = w2s(drawStart.cx, drawStart.cy);
-      const cx2 = (s1.x + s2.x) / 2, cy2 = (s1.y + s2.y) / 2;
-      ctx.beginPath();
-      ctx.ellipse(cx2, cy2, Math.abs(s2.x - s1.x) / 2 || 1, Math.abs(s2.y - s1.y) / 2 || 1, 0, 0, Math.PI * 2);
-      ctx.stroke();
-    }
+  if (state.tool === 'circle' && drawStart) {
+    ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 1; ctx.setLineDash([3, 3]);
+    ctx.beginPath();
+    const cx2 = drawStart.cx, cy2 = drawStart.cy;
+    const r = Math.hypot(drawStart.ex - drawStart.cx, drawStart.ey - drawStart.cy);
+    const c_s = w2s(cx2, cy2);
+    ctx.arc(c_s.x, c_s.y, r * state.cam.z, 0, Math.PI * 2);
+    ctx.stroke();
     ctx.setLineDash([]);
   }
 
-  hud.textContent = `줌: ${Math.round(state.cam.z * 100)}%`;
+  let guideTxt = guides[state.tool] || '';
+  hud.innerHTML = `${guideTxt} <span style="font-weight:normal;font-size:11px;color:#888;margin-left:12px">줌: ${Math.round(state.cam.z * 100)}%</span>`;
 
   const cursors = { select: 'default', eraser: 'pointer', hand: 'grab' };
   cv.style.cursor = cursors[state.tool] || 'crosshair';
@@ -258,27 +319,66 @@ cv.addEventListener('mousedown', e => {
         }
       }
     }
-    // Select object if node not hit
     const oi = hitObj(mx, my);
     state.selectedIdx = oi >= 0 ? oi : -1;
     render(); updateUI();
   } else if (state.tool === 'eraser') {
     const oi = hitObj(mx, my);
     if (oi >= 0) { saveUndo(); state.objects.splice(oi, 1); if (state.selectedIdx >= state.objects.length) state.selectedIdx = -1; render(); updateUI(); }
-  } else if (state.tool === 'line' || state.tool === 'polygon' || state.tool === 'pulse') {
-    if (!drawPts) drawPts = [];
-    drawPts.push({ x: sw, y: sh });
+  } else if (['line', 'rect', 'pulse'].includes(state.tool)) {
+    if (!drawPts) drawPts = [{x:sw, y:sh}];
+    else if (drawPts.length === 1) {
+      drawPts.push({x:sw, y:sh});
+      saveUndo();
+      let finalPts = [];
+      let name = '';
+      if (state.tool === 'line') { finalPts = drawPts; name = '직선'; }
+      else if (state.tool === 'rect') { 
+         finalPts = [{x:drawPts[0].x, y:drawPts[0].y}, {x:drawPts[1].x, y:drawPts[0].y}, {x:drawPts[1].x, y:drawPts[1].y}, {x:drawPts[0].x, y:drawPts[1].y}, {x:drawPts[0].x, y:drawPts[0].y}]; 
+         name = '사각형'; 
+      }
+      else if (state.tool === 'pulse') { 
+         finalPts = getPulse(drawPts[0], drawPts[1]); 
+         name = '펄스'; 
+      }
+      state.objects.push({ id: uid(), type: state.tool, points: finalPts, stitch: state.tool === 'rect' ? 'fill' : 'running', density: 2, angle: 0, color: '#4361ee', name: name });
+      drawPts = null;
+      updateUI();
+    }
+    render();
+  } else if (state.tool === 'arch') {
+    if (!drawPts) drawPts = [{x:sw, y:sh}];
+    else if (drawPts.length === 1) drawPts.push({x:sw, y:sh});
+    else if (drawPts.length === 2) {
+      saveUndo();
+      let finalPts = getArch(drawPts[0], drawPts[1], {x:sw, y:sh});
+      state.objects.push({ id: uid(), type: 'arch', points: finalPts, stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '호' });
+      drawPts = null;
+      updateUI();
+    }
     render();
   } else if (state.tool === 'curve') {
-    curving = true;
-    drawPts = [{ x: w.x, y: w.y }];
-  } else if (state.tool === 'rect' || state.tool === 'ellipse') {
-    drawStart = { sx: sw, sy: sh, cx: sw, cy: sh };
+    if (!drawPts) drawPts = [{x:sw, y:sh}];
+    else {
+      if (Math.hypot(sw - drawPts[0].x, sh - drawPts[0].y) < 10 && drawPts.length > 2) {
+        drawPts.push({x: drawPts[0].x, y: drawPts[0].y});
+        saveUndo();
+        state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '자유곡선' });
+        drawPts = null;
+        updateUI();
+      } else {
+        drawPts.push({x:sw, y:sh});
+      }
+    }
+    render();
+  } else if (state.tool === 'circle') {
+    drawStart = { cx: sw, cy: sh, ex: sw, ey: sh };
   }
 });
 
 cv.addEventListener('mousemove', e => {
   const mx = e.offsetX, my = e.offsetY, w = s2w(mx, my);
+  tempPos = { x: snap(w.x), y: snap(w.y) };
   pos.textContent = `${(w.x / 20).toFixed(1)}, ${(-w.y / 20).toFixed(1)} cm`;
 
   if (panning && panStart) {
@@ -298,11 +398,10 @@ cv.addEventListener('mousemove', e => {
     state.objects[state.selectedIdx].points[drag.nodeIdx].x = snap(w.x);
     state.objects[state.selectedIdx].points[drag.nodeIdx].y = snap(w.y);
     render();
-  } else if (state.tool === 'curve' && curving) {
-    drawPts.push({ x: w.x, y: w.y });
+  } else if (state.tool === 'circle' && drawStart) {
+    drawStart.ex = tempPos.x; drawStart.ey = tempPos.y;
     render();
-  } else if ((state.tool === 'rect' || state.tool === 'ellipse') && drawStart) {
-    drawStart.cx = snap(w.x); drawStart.cy = snap(w.y);
+  } else if (drawPts && drawPts.length > 0) {
     render();
   }
 });
@@ -311,35 +410,14 @@ cv.addEventListener('mouseup', e => {
   if (panning) { panning = false; cv.style.cursor = state.tool === 'hand' ? 'grab' : 'default'; return; }
   if (drag) { drag = null; render(); return; }
 
-  if (state.tool === 'curve' && curving) {
-    curving = false;
-    if (drawPts && drawPts.length > 2) {
-      let s = rdp(drawPts, 4);
-      if (s.length > 1) s = chaikin(s, 2);
-      if (s.length > 1) {
-        saveUndo();
-        state.objects.push({ id: uid(), type: 'curve', points: s, stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '곡선' });
-        updateUI();
-      }
-    }
-    drawPts = null; render();
-  } else if (state.tool === 'rect' && drawStart) {
-    const x1 = Math.min(drawStart.sx, drawStart.cx), y1 = Math.min(drawStart.sy, drawStart.cy);
-    const x2 = Math.max(drawStart.sx, drawStart.cx), y2 = Math.max(drawStart.sy, drawStart.cy);
-    if (x2 - x1 > 5 && y2 - y1 > 5) {
-      saveUndo();
-      state.objects.push({ id: uid(), type: 'rect', points: [{ x: x1, y: y1 }, { x: x2, y: y1 }, { x: x2, y: y2 }, { x: x1, y: y2 }, { x: x1, y: y1 }], stitch: 'fill', density: 2, angle: 0, color: '#4361ee', name: '사각형' });
-      updateUI();
-    }
-    drawStart = null; render();
-  } else if (state.tool === 'ellipse' && drawStart) {
-    const cx2 = (drawStart.sx + drawStart.cx) / 2, cy2 = (drawStart.sy + drawStart.cy) / 2;
-    const rx = Math.abs(drawStart.cx - drawStart.sx) / 2, ry = Math.abs(drawStart.cy - drawStart.sy) / 2;
-    if (rx > 3 && ry > 3) {
+  if (state.tool === 'circle' && drawStart) {
+    saveUndo();
+    const cx2 = drawStart.cx, cy2 = drawStart.cy;
+    const r = Math.hypot(drawStart.ex - drawStart.cx, drawStart.ey - drawStart.cy);
+    if (r > 1) {
       const pts = [];
-      for (let i = 0; i <= 48; i++) { const t = i / 48 * Math.PI * 2; pts.push({ x: cx2 + rx * Math.cos(t), y: cy2 + ry * Math.sin(t) }); }
-      saveUndo();
-      state.objects.push({ id: uid(), type: 'ellipse', points: pts, stitch: 'satin', density: 2, angle: 0, color: '#4361ee', name: '원' });
+      for (let i = 0; i <= 48; i++) { const t = i / 48 * Math.PI * 2; pts.push({ x: cx2 + r * Math.cos(t), y: cy2 + r * Math.sin(t) }); }
+      state.objects.push({ id: uid(), type: 'circle', points: pts, stitch: 'satin', density: 2, angle: 0, color: '#4361ee', name: '원' });
       updateUI();
     }
     drawStart = null; render();
@@ -347,35 +425,9 @@ cv.addEventListener('mouseup', e => {
 });
 
 cv.addEventListener('dblclick', () => {
-  if ((state.tool === 'line' || state.tool === 'polygon' || state.tool === 'pulse') && drawPts && drawPts.length > 1) {
+  if (state.tool === 'curve' && drawPts && drawPts.length > 1) {
     saveUndo();
-    if (state.tool === 'polygon') drawPts.push({ x: drawPts[0].x, y: drawPts[0].y });
-    
-    let finalPts = drawPts;
-    if (state.tool === 'pulse') {
-      finalPts = [];
-      const density = 20; // 2mm zigzag
-      const amp = 30; // 3mm height
-      for (let i = 0; i < drawPts.length - 1; i++) {
-        const p1 = drawPts[i], p2 = drawPts[i+1];
-        const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y);
-        const steps = Math.max(2, Math.floor(dist / density));
-        const dx = (p2.x - p1.x) / steps, dy = (p2.y - p1.y) / steps;
-        const nx = -dy / (dist/steps || 1) * amp, ny = dx / (dist/steps || 1) * amp;
-        
-        for (let j = 0; j <= steps; j++) {
-          const cx = p1.x + dx * j, cy = p1.y + dy * j;
-          if (j % 2 !== 0 && j !== steps) {
-            finalPts.push({ x: cx + nx, y: cy + ny });
-          } else {
-            finalPts.push({ x: cx, y: cy });
-          }
-        }
-      }
-    }
-    
-    const typeNames = { line: '직선', polygon: '다각형', pulse: '지그재그선' };
-    state.objects.push({ id: uid(), type: state.tool, points: finalPts, stitch: state.tool === 'polygon' ? 'fill' : 'running', density: 2, angle: 0, color: '#4361ee', name: typeNames[state.tool] });
+    state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '자유곡선' });
     drawPts = null; render(); updateUI();
   }
 });
@@ -398,7 +450,7 @@ document.addEventListener('keydown', e => {
     if (e.key === 'z') { e.preventDefault(); undo(); }
     else if (e.key === 'y') { e.preventDefault(); redo(); }
   }
-  const keyMap = { v: 'select', h: 'hand', e: 'eraser', l: 'line', c: 'curve', r: 'rect', o: 'ellipse', p: 'polygon' };
+  const keyMap = { v: 'select', h: 'hand', e: 'eraser', l: 'line', a: 'arch', c: 'circle', r: 'rect', p: 'pulse', f: 'curve' };
   if (keyMap[e.key] && !e.ctrlKey && !e.metaKey) setTool(keyMap[e.key]);
   if (e.key === 'Delete' || e.key === 'Backspace') {
     if (state.selectedIdx >= 0) {
@@ -413,8 +465,9 @@ document.addEventListener('keydown', e => {
 // ─── Tool selection ───
 function setTool(t) {
   state.tool = t;
+  drawPts = null; drawStart = null;
   document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
-  document.getElementById('status-tool').textContent = `도구: ${{ select: '선택', node: '노드편집', hand: '이동', eraser: '지우기', line: '직선', curve: '곡선', pulse: '지그재그선', rect: '사각형', ellipse: '원', polygon: '다각형' }[t] || t}`;
+  document.getElementById('status-tool').textContent = `도구: ${ { select: '선택', node: '노드편집', hand: '이동', eraser: '지우기', line: '직선', arch: '호', curve: '자유곡선', pulse: '펄스', rect: '사각형', circle: '원' }[t] || t}`;
   render();
 }
 
