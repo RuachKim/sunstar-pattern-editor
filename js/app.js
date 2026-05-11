@@ -209,8 +209,9 @@ function drawObj(o, idx) {
       }
     } else if (state.tool === 'node') {
       // Draw nodes
-      for (let j = 0; j < pts.length; j++) {
-        const p = w2s(pts[j].x, pts[j].y);
+      const nPts = o.controlPoints || pts;
+      for (let j = 0; j < nPts.length; j++) {
+        const p = w2s(nPts[j].x, nPts[j].y);
         ctx.fillStyle = '#fff'; ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.arc(p.x, p.y, 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
       }
@@ -300,7 +301,13 @@ cv.addEventListener('mousedown', e => {
     const oi = hitObj(mx, my);
     if (oi >= 0) {
       state.selectedIdx = oi;
-      drag = { t: 'move', orig: state.objects[oi].points.map(p => ({ x: p.x, y: p.y })), wx: w.x, wy: w.y };
+      const obj = state.objects[oi];
+      drag = { 
+        t: 'move', 
+        orig: obj.points.map(p => ({ x: p.x, y: p.y })), 
+        origCtrl: obj.controlPoints ? obj.controlPoints.map(p => ({ x: p.x, y: p.y })) : null,
+        wx: w.x, wy: w.y 
+      };
       saveUndo();
       render(); updateUI();
       return;
@@ -309,9 +316,10 @@ cv.addEventListener('mousedown', e => {
     render(); updateUI();
   } else if (state.tool === 'node') {
     if (state.selectedIdx >= 0) {
-      const pts = state.objects[state.selectedIdx].points;
-      for (let i = 0; i < pts.length; i++) {
-        const p = w2s(pts[i].x, pts[i].y);
+      const obj = state.objects[state.selectedIdx];
+      const nPts = obj.controlPoints || obj.points;
+      for (let i = 0; i < nPts.length; i++) {
+        const p = w2s(nPts[i].x, nPts[i].y);
         if (Math.hypot(mx - p.x, my - p.y) < 8) {
           drag = { t: 'node', nodeIdx: i };
           saveUndo();
@@ -352,7 +360,7 @@ cv.addEventListener('mousedown', e => {
     else if (drawPts.length === 2) {
       saveUndo();
       let finalPts = getArch(drawPts[0], drawPts[1], {x:sw, y:sh});
-      state.objects.push({ id: uid(), type: 'arch', points: finalPts, stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '호' });
+      state.objects.push({ id: uid(), type: 'arch', points: finalPts, controlPoints: [drawPts[0], drawPts[1], {x:sw, y:sh}], stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '호' });
       drawPts = null;
       updateUI();
     }
@@ -393,10 +401,25 @@ cv.addEventListener('mousemove', e => {
       state.objects[state.selectedIdx].points[j].x = drag.orig[j].x + dx;
       state.objects[state.selectedIdx].points[j].y = drag.orig[j].y + dy;
     }
+    if (drag.origCtrl) {
+      for (let j = 0; j < drag.origCtrl.length; j++) {
+        state.objects[state.selectedIdx].controlPoints[j].x = drag.origCtrl[j].x + dx;
+        state.objects[state.selectedIdx].controlPoints[j].y = drag.origCtrl[j].y + dy;
+      }
+    }
     render();
   } else if (state.tool === 'node' && drag && drag.t === 'node') {
-    state.objects[state.selectedIdx].points[drag.nodeIdx].x = snap(w.x);
-    state.objects[state.selectedIdx].points[drag.nodeIdx].y = snap(w.y);
+    const obj = state.objects[state.selectedIdx];
+    if (obj.controlPoints) {
+      obj.controlPoints[drag.nodeIdx].x = snap(w.x);
+      obj.controlPoints[drag.nodeIdx].y = snap(w.y);
+      if (obj.type === 'arch') {
+        obj.points = getArch(obj.controlPoints[0], obj.controlPoints[1], obj.controlPoints[2]);
+      }
+    } else {
+      obj.points[drag.nodeIdx].x = snap(w.x);
+      obj.points[drag.nodeIdx].y = snap(w.y);
+    }
     render();
   } else if (state.tool === 'circle' && drawStart) {
     drawStart.ex = tempPos.x; drawStart.ey = tempPos.y;
@@ -611,6 +634,23 @@ function transformSelected(type) {
     }
     p.x = nx; p.y = ny;
   });
+  if (obj.controlPoints) {
+    obj.controlPoints.forEach(p => {
+      let nx = p.x, ny = p.y;
+      if (type === 'flip-h') {
+        nx = cx - (p.x - cx);
+      } else if (type === 'flip-v') {
+        ny = cy - (p.y - cy);
+      } else if (type === 'rot-cw') {
+        nx = cx - (p.y - cy);
+        ny = cy + (p.x - cx);
+      } else if (type === 'rot-ccw') {
+        nx = cx + (p.y - cy);
+        ny = cy - (p.x - cx);
+      }
+      p.x = nx; p.y = ny;
+    });
+  }
   render(); updateUI();
 }
 
@@ -634,6 +674,12 @@ document.getElementById('btn-mirror-copy').addEventListener('click', () => {
   newObj.points.forEach(p => {
     p.x = b.x2 + (b.x2 - p.x);
   });
+  
+  if (newObj.controlPoints) {
+    newObj.controlPoints.forEach(p => {
+      p.x = b.x2 + (b.x2 - p.x);
+    });
+  }
   
   state.objects.push(newObj);
   state.selectedIdx = state.objects.length - 1; // select the new copy
