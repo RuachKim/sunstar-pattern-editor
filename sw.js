@@ -1,4 +1,4 @@
-const CACHE = 'sunstar-v2';
+const CACHE = 'sunstar-v3';
 const ASSETS = ['./', './index.html', './css/style.css', './js/app.js', './js/stitch-engine.js', './js/dst-writer.js', './manifest.json'];
 
 self.addEventListener('install', e => {

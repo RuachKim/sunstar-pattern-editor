@@ -251,11 +251,18 @@ body {
 
 #hud {
   position: absolute;
-  top: 8px;
-  left: 10px;
-  font: 500 11px 'SF Mono', 'Fira Code', monospace;
-  color: var(--text-muted);
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.8);
+  color: #fff;
+  padding: 10px 20px;
+  border-radius: 20px;
+  font-size: 14px;
   pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  transition: opacity 0.3s;
+  z-index: 100;
 }
 
 #pos {
