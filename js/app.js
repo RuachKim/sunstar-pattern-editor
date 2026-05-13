@@ -1,7 +1,6 @@
 import { StitchEngine, PatternPresets } from './stitch-engine.js';
 import { DSTWriter } from './dst-writer.js';
 
-// ─── State ───
 const state = {
   objects: [],
   selectedIdx: -1,
@@ -10,6 +9,7 @@ const state = {
   undoStack: [],
   redoStack: [],
   maxStitchLen: 30,
+  bgImage: null,
 };
 
 let drag = null, drawPts = null, drawStart = null, tempPos = null;
@@ -146,7 +146,9 @@ function chaikin(pts, n) {
 // ─── Rendering ───
 function drawGrid() {
   const W = cv.width, H = cv.height;
-  ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, W, H);
+  if (!state.bgImage) {
+    ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, W, H);
+  }
   const gz = 20 * state.cam.z;
   if (gz < 3) return;
   const ox = W / 2 - state.cam.x * state.cam.z;
@@ -220,7 +222,22 @@ function drawObj(o, idx) {
 }
 
 function render() {
+  if (state.bgImage) {
+    // Clear canvas before drawing background image
+    ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, cv.width, cv.height);
+    const W = state.bgImage.width;
+    const H = state.bgImage.height;
+    const scale = 400 / Math.max(W, H);
+    const sw = W * scale * state.cam.z;
+    const sh = H * scale * state.cam.z;
+    const c = w2s(0, 0);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(state.bgImage, c.x - sw/2, c.y - sh/2, sw, sh);
+    ctx.globalAlpha = 1.0;
+  }
+  
   drawGrid();
+
   for (let i = 0; i < state.objects.length; i++) drawObj(state.objects[i], i);
 
   if (drawPts && drawPts.length > 0) {
@@ -284,8 +301,8 @@ function hitObj(mx, my) {
   return -1;
 }
 
-// ─── Mouse events ───
-cv.addEventListener('mousedown', e => {
+// ─── Mouse/Touch events ───
+cv.addEventListener('pointerdown', e => {
   const mx = e.offsetX, my = e.offsetY;
   const w = s2w(mx, my), sw = snap(w.x), sh = snap(w.y);
 
@@ -384,7 +401,7 @@ cv.addEventListener('mousedown', e => {
   }
 });
 
-cv.addEventListener('mousemove', e => {
+cv.addEventListener('pointermove', e => {
   const mx = e.offsetX, my = e.offsetY, w = s2w(mx, my);
   tempPos = { x: snap(w.x), y: snap(w.y) };
   pos.textContent = `${(w.x / 20).toFixed(1)}, ${(-w.y / 20).toFixed(1)} cm`;
@@ -429,7 +446,7 @@ cv.addEventListener('mousemove', e => {
   }
 });
 
-cv.addEventListener('mouseup', e => {
+cv.addEventListener('pointerup', e => {
   if (panning) { panning = false; cv.style.cursor = state.tool === 'hand' ? 'grab' : 'default'; return; }
   if (drag) { drag = null; render(); return; }
 
@@ -686,99 +703,58 @@ document.getElementById('btn-mirror-copy').addEventListener('click', () => {
   render(); updateUI();
 });
 
-// ─── Image Vectorizer (Sketch-to-Pattern) ───
-document.getElementById('btn-import-img').addEventListener('click', () => document.getElementById('inp-image').click());
+// ─── Camera Feature ───
+const btnCamera = document.getElementById('btn-camera');
+const btnClearBg = document.getElementById('btn-clear-bg');
+const cameraModal = document.getElementById('camera-modal');
+const cameraVideo = document.getElementById('camera-video');
+const btnCapture = document.getElementById('btn-capture');
+const btnCloseCamera = document.getElementById('btn-close-camera');
 
-document.getElementById('inp-image').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const img = new Image();
-    img.onload = () => {
-      // 1. Offscreen canvas & Scale down for processing
-      const maxDim = 150; // max size for processing
-      const scale = Math.min(maxDim / img.width, maxDim / img.height);
-      const w = Math.round(img.width * scale);
-      const h = Math.round(img.height * scale);
-      const ocv = document.createElement('canvas');
-      ocv.width = w; ocv.height = h;
-      const octx = ocv.getContext('2d');
-      octx.drawImage(img, 0, 0, w, h);
-      
-      const imgData = octx.getImageData(0, 0, w, h);
-      const data = imgData.data;
-      const points = [];
-      
-      // 2. Thresholding & Extract dark pixels
-      let minVal = 255;
-      for (let i = 0; i < data.length; i += 4) {
-        const v = (data[i] + data[i+1] + data[i+2]) / 3;
-        if (v < minVal) minVal = v;
-      }
-      const thresh = Math.min(200, minVal + 50); // adaptive threshold offset
-      
-      for (let y = 0; y < h; y += 2) { // step by 2 for faster processing and thinning
-        for (let x = 0; x < w; x += 2) {
-          const idx = (y * w + x) * 4;
-          const v = (data[idx] + data[idx+1] + data[idx+2]) / 3;
-          if (v < thresh) {
-            // center to canvas, scaled up
-            points.push({
-              x: (x - w/2) * 5,
-              y: (y - h/2) * 5,
-              visited: false
-            });
-          }
-        }
-      }
-      
-      if (points.length < 2) return;
-      
-      // 3. TSP-like nearest neighbor connection
-      const path = [points[0]];
-      points[0].visited = true;
-      let curr = points[0];
-      
-      for (let i = 1; i < points.length; i++) {
-        let minDist = Infinity;
-        let bestIdx = -1;
-        // Search a local window first for speed, fallback to all
-        let searchLimit = Math.min(points.length, 300);
-        for (let j = 0; j < points.length; j++) {
-          if (!points[j].visited) {
-            const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y);
-            if (d < minDist) { minDist = d; bestIdx = j; }
-          }
-        }
-        if (bestIdx !== -1) {
-          points[bestIdx].visited = true;
-          curr = points[bestIdx];
-          path.push(curr);
-        }
-      }
-      
-      // 4. Simplify path
-      const optimized = rdp(path, 6.0); // 6.0 tolerance
-      
-      saveUndo();
-      state.objects.push({
-        id: uid(),
-        type: 'sketch',
-        points: optimized,
-        stitch: 'running',
-        density: 2,
-        angle: 0,
-        color: '#4361ee',
-        name: '스케치 변환'
-      });
-      
-      document.getElementById('inp-image').value = '';
-      render(); updateUI();
-    };
-    img.src = ev.target.result;
+let cameraStream = null;
+
+btnCamera.addEventListener('click', async () => {
+  cameraModal.style.display = 'flex';
+  try {
+    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+    cameraVideo.srcObject = cameraStream;
+  } catch (err) {
+    alert('카메라에 접근할 수 없습니다: ' + err.message);
+    cameraModal.style.display = 'none';
+  }
+});
+
+btnCloseCamera.addEventListener('click', () => {
+  cameraModal.style.display = 'none';
+  if (cameraStream) {
+    cameraStream.getTracks().forEach(t => t.stop());
+    cameraStream = null;
+  }
+});
+
+btnCapture.addEventListener('click', () => {
+  if (!cameraStream) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = cameraVideo.videoWidth;
+  canvas.height = cameraVideo.videoHeight;
+  const tempCtx = canvas.getContext('2d');
+  tempCtx.drawImage(cameraVideo, 0, 0);
+  
+  const img = new Image();
+  img.onload = () => {
+    state.bgImage = img;
+    btnClearBg.style.display = 'inline-block';
+    render();
   };
-  reader.readAsDataURL(file);
+  img.src = canvas.toDataURL('image/jpeg', 0.8);
+  
+  btnCloseCamera.click();
+});
+
+btnClearBg.addEventListener('click', () => {
+  state.bgImage = null;
+  btnClearBg.style.display = 'none';
+  render();
 });
 
 // ─── Init ───

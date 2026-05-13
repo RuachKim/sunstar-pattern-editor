@@ -19,13 +19,29 @@
   <header id="topbar">
     <div class="logo">SunStar <span>Pattern Editor</span></div>
     <div class="topbar-actions">
-      <input type="file" id="inp-image" accept="image/*" style="display:none">
-      <button class="btn-sm" id="btn-import-img" title="이미지 불러오기">📷 이미지 불러오기</button>
+      <button class="btn-sm" id="btn-camera" title="카메라 촬영">📷 카메라 촬영</button>
+      <button class="btn-sm" id="btn-clear-bg" title="배경 지우기" style="display:none;">❌ 배경 지우기</button>
       <button class="btn-sm" id="btn-undo" title="되돌리기 (Ctrl+Z)">↩ 되돌리기</button>
       <button class="btn-sm" id="btn-redo" title="다시하기 (Ctrl+Y)">↪ 다시하기</button>
       <button class="btn-sm btn-danger" id="btn-clear-all">🗑 전체삭제</button>
     </div>
   </header>
+
+  <!-- Camera Modal -->
+  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
+    <div style="position:relative; width: 90%; max-width: 640px;">
+      <video id="camera-video" autoplay playsinline style="width:100%; border:2px solid #4361ee; border-radius:8px;"></video>
+      <!-- Guideline overlay -->
+      <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:70%; height:70%; border:2px dashed rgba(255,255,255,0.6); pointer-events:none;">
+        <div style="position:absolute; top:0; left:50%; width:1px; height:100%; background:rgba(255,255,255,0.4);"></div>
+        <div style="position:absolute; top:50%; left:0; width:100%; height:1px; background:rgba(255,255,255,0.4);"></div>
+      </div>
+    </div>
+    <div style="margin-top:20px; display:flex; gap:16px;">
+      <button id="btn-capture" class="btn-sm" style="font-size:16px; padding:12px 24px; background:#2ecc71; color:#fff; border:none; border-radius:4px; cursor:pointer;">📸 촬영하기</button>
+      <button id="btn-close-camera" class="btn-sm btn-danger" style="font-size:16px; padding:12px 24px;">취소</button>
+    </div>
+  </div>
 
   <!-- Tool Sidebar -->
   <nav id="toolbar">
