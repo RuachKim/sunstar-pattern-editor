@@ -904,10 +904,20 @@ btnCapture.addEventListener('click', () => {
       if (pts.length <= 2) return [{ type: 'line', p0: pts[0], p1: pts[pts.length-1] }];
       const f = pts[0], l = pts[pts.length - 1];
       let maxLineErr = 0, maxLineIdx = 0;
+      let pathLen = 0;
+      
       const dx = l.x - f.x, dy = l.y - f.y, len = Math.hypot(dx, dy) || 1;
+      for (let i = 1; i < pts.length; i++) {
+        pathLen += Math.hypot(pts[i].x - pts[i-1].x, pts[i].y - pts[i-1].y);
+      }
       for (let i = 1; i < pts.length - 1; i++) {
         const d = Math.abs((pts[i].x - f.x) * dy - (pts[i].y - f.y) * dx) / len;
         if (d > maxLineErr) { maxLineErr = d; maxLineIdx = i; }
+      }
+      
+      const isLineLike = (pathLen <= len * 1.05) || (maxLineErr <= e * 1.5);
+      if (isLineLike && maxLineErr <= e * 2.5) { 
+        return [{ type: 'line', p0: f, p1: l }];
       }
       
       const midPt = pts[Math.floor(pts.length / 2)];
@@ -923,9 +933,6 @@ btnCapture.addEventListener('click', () => {
         if (minDist > maxArchErr) { maxArchErr = minDist; maxArchIdx = i; }
       }
       
-      if (maxLineErr <= e && maxLineErr <= maxArchErr * 1.5) { // Bias towards line
-        return [{ type: 'line', p0: f, p1: l }];
-      }
       if (maxArchErr <= e) {
         return [{ type: 'arch', p0: f, p1: l, p2: cp }];
       }
