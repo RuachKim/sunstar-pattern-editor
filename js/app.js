@@ -797,54 +797,113 @@ btnCapture.addEventListener('click', () => {
     return d - b - c + a;
   };
 
-  const points = [];
+  const binImg = new Uint8Array(w * h);
   const T = 0.85;
-  for (let y = 0; y < h; y += 2) {
-    for (let x = 0; x < w; x += 2) {
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
       const area = (Math.min(w-1, x+S) - Math.max(0, x-S) + 1) * (Math.min(h-1, y+S) - Math.max(0, y-S) + 1);
       const localAvg = getSum(x-S, y-S, x+S, y+S) / area;
-      if (gray[y*w + x] < localAvg * T) {
-         points.push({
-           x: (x - w/2) / scale,
-           y: (y - h/2) / scale,
-           visited: false
-         });
+      if (gray[y*w + x] < localAvg * T - 5) {
+         binImg[y*w + x] = 1;
       }
     }
   }
   
-  if (points.length > 2) {
-    const path = [points[0]];
-    points[0].visited = true;
-    let curr = points[0];
-    
-    for (let i = 1; i < points.length; i++) {
-      let minDist = Infinity;
-      let bestIdx = -1;
-      for (let j = 0; j < points.length; j++) {
-        if (!points[j].visited) {
-          const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y);
-          if (d < minDist) { minDist = d; bestIdx = j; }
-        }
-      }
-      if (bestIdx !== -1) {
-        points[bestIdx].visited = true;
-        curr = points[bestIdx];
-        path.push(curr);
+  // Zhang-Suen Thinning (Skeletonization)
+  const marker = new Uint8Array(w * h);
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        let p = y*w + x;
+        if (binImg[p] === 1) {
+          let p2 = binImg[(y-1)*w + x], p3 = binImg[(y-1)*w + x+1], p4 = binImg[y*w + x+1], p5 = binImg[(y+1)*w + x+1];
+          let p6 = binImg[(y+1)*w + x], p7 = binImg[(y+1)*w + x-1], p8 = binImg[y*w + x-1], p9 = binImg[(y-1)*w + x-1];
+          let A = (p2==0 && p3==1) + (p3==0 && p4==1) + (p4==0 && p5==1) + (p5==0 && p6==1) + 
+                  (p6==0 && p7==1) + (p7==0 && p8==1) + (p8==0 && p9==1) + (p9==0 && p2==1);
+          let B = p2+p3+p4+p5+p6+p7+p8+p9;
+          if (A === 1 && B >= 2 && B <= 6 && p2*p4*p6 === 0 && p4*p6*p8 === 0) { marker[p] = 1; changed = true; } 
+          else { marker[p] = 0; }
+        } else { marker[p] = 0; }
       }
     }
+    for (let i = 0; i < w*h; i++) if (marker[i]) binImg[i] = 0;
     
-    const optimized = rdp(path, 6.0);
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        let p = y*w + x;
+        if (binImg[p] === 1) {
+          let p2 = binImg[(y-1)*w + x], p3 = binImg[(y-1)*w + x+1], p4 = binImg[y*w + x+1], p5 = binImg[(y+1)*w + x+1];
+          let p6 = binImg[(y+1)*w + x], p7 = binImg[(y+1)*w + x-1], p8 = binImg[y*w + x-1], p9 = binImg[(y-1)*w + x-1];
+          let A = (p2==0 && p3==1) + (p3==0 && p4==1) + (p4==0 && p5==1) + (p5==0 && p6==1) + 
+                  (p6==0 && p7==1) + (p7==0 && p8==1) + (p8==0 && p9==1) + (p9==0 && p2==1);
+          let B = p2+p3+p4+p5+p6+p7+p8+p9;
+          if (A === 1 && B >= 2 && B <= 6 && p2*p4*p8 === 0 && p2*p6*p8 === 0) { marker[p] = 1; changed = true; } 
+          else { marker[p] = 0; }
+        }
+      }
+    }
+    for (let i = 0; i < w*h; i++) if (marker[i]) binImg[i] = 0;
+  }
+
+  // Trace continuous paths from skeleton
+  const visited = new Uint8Array(w * h);
+  const paths = [];
+  const dirs = [{dx:1,dy:0}, {dx:1,dy:1}, {dx:0,dy:1}, {dx:-1,dy:1}, {dx:-1,dy:0}, {dx:-1,dy:-1}, {dx:0,dy:-1}, {dx:1,dy:-1}];
+  
+  let startPoints = [];
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (binImg[y*w+x] === 1) {
+        let n = 0;
+        for(let d of dirs) if (binImg[(y+d.dy)*w + x+d.dx] === 1) n++;
+        if (n === 1) startPoints.push({x, y});
+      }
+    }
+  }
+  
+  const traceFrom = (startX, startY) => {
+    let trace = [];
+    let cx = startX, cy = startY;
+    while (true) {
+      trace.push({x: (cx - w/2)/scale, y: (cy - h/2)/scale});
+      visited[cy*w + cx] = 1;
+      let next = null;
+      for (let d of dirs) {
+        let nx = cx + d.dx, ny = cy + d.dy;
+        if (binImg[ny*w + nx] === 1 && !visited[ny*w + nx]) {
+          next = {x: nx, y: ny}; break;
+        }
+      }
+      if (!next) break;
+      cx = next.x; cy = next.y;
+    }
+    return trace;
+  };
+
+  for (let pt of startPoints) {
+    if (!visited[pt.y*w + pt.x]) {
+      const tr = traceFrom(pt.x, pt.y);
+      if (tr.length > 3) paths.push(tr);
+    }
+  }
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      if (binImg[y*w+x] === 1 && !visited[y*w+x]) {
+        const tr = traceFrom(x, y);
+        if (tr.length > 3) paths.push(tr);
+      }
+    }
+  }
+  
+  if (paths.length > 0) {
     saveUndo();
-    state.objects.push({
-      id: uid(),
-      type: 'curve',
-      points: optimized,
-      stitch: 'running',
-      density: 2,
-      angle: 0,
-      color: '#4361ee',
-      name: '카메라 변환'
+    paths.forEach((tr, i) => {
+      const optimized = rdp(tr, 2.0); // tighter simplification for exact shapes
+      state.objects.push({
+        id: uid(), type: 'curve', points: optimized, stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '카메라 선 ' + (i+1)
+      });
     });
   } else {
     alert("패턴을 인식할 수 없습니다. 밝은 곳에서 진한 펜으로 그려보세요.");
