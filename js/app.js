@@ -915,8 +915,8 @@ btnCapture.addEventListener('click', () => {
         if (d > maxLineErr) { maxLineErr = d; maxLineIdx = i; }
       }
       
-      const isLineLike = (pathLen <= len * 1.05) || (maxLineErr <= e * 1.5);
-      if (isLineLike && maxLineErr <= e * 2.5) { 
+      const isLineLike = (pathLen <= len * 1.20) || (maxLineErr <= e * 3.0);
+      if (isLineLike && maxLineErr <= e * 4.0) { 
         return [{ type: 'line', p0: f, p1: l }];
       }
       
@@ -950,6 +950,26 @@ btnCapture.addEventListener('click', () => {
       
       primitives.forEach(prim => {
         if (prim.type === 'line') {
+          let dx = prim.p1.x - prim.p0.x;
+          let dy = prim.p1.y - prim.p0.y;
+          let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+          const snapAngles = [0, 45, 90, 135, 180, -45, -90, -135, -180];
+          for (let s of snapAngles) {
+            let dist = Math.abs(angle - s);
+            if (dist > 180) dist = 360 - dist;
+            if (dist < 15) { // 15 degrees snap tolerance
+              let rad = s * Math.PI / 180;
+              let len = Math.hypot(dx, dy);
+              let cx = (prim.p0.x + prim.p1.x) / 2;
+              let cy = (prim.p0.y + prim.p1.y) / 2;
+              prim.p0.x = cx - Math.cos(rad) * len / 2;
+              prim.p0.y = cy - Math.sin(rad) * len / 2;
+              prim.p1.x = cx + Math.cos(rad) * len / 2;
+              prim.p1.y = cy + Math.sin(rad) * len / 2;
+              break;
+            }
+          }
+          
           state.objects.push({
             id: uid(), type: 'line', points: [prim.p0, prim.p1],
             stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '자동 직선 ' + shapeCount++
