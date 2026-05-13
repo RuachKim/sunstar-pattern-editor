@@ -899,10 +899,61 @@ btnCapture.addEventListener('click', () => {
   
   if (paths.length > 0) {
     saveUndo();
-    paths.forEach((tr, i) => {
-      const optimized = rdp(tr, 2.0); // tighter simplification for exact shapes
-      state.objects.push({
-        id: uid(), type: 'curve', points: optimized, stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '카메라 선 ' + (i+1)
+    
+    const fitPrimitives = (pts, e) => {
+      if (pts.length <= 2) return [{ type: 'line', p0: pts[0], p1: pts[pts.length-1] }];
+      const f = pts[0], l = pts[pts.length - 1];
+      let maxLineErr = 0, maxLineIdx = 0;
+      const dx = l.x - f.x, dy = l.y - f.y, len = Math.hypot(dx, dy) || 1;
+      for (let i = 1; i < pts.length - 1; i++) {
+        const d = Math.abs((pts[i].x - f.x) * dy - (pts[i].y - f.y) * dx) / len;
+        if (d > maxLineErr) { maxLineErr = d; maxLineIdx = i; }
+      }
+      
+      const midPt = pts[Math.floor(pts.length / 2)];
+      const cp = { x: 2 * midPt.x - 0.5 * f.x - 0.5 * l.x, y: 2 * midPt.y - 0.5 * f.y - 0.5 * l.y };
+      const archPts = getArch(f, l, cp);
+      let maxArchErr = 0, maxArchIdx = 0;
+      for (let i = 1; i < pts.length - 1; i++) {
+        let minDist = Infinity;
+        for (let j = 0; j < archPts.length; j++) {
+          const d = Math.hypot(pts[i].x - archPts[j].x, pts[i].y - archPts[j].y);
+          if (d < minDist) minDist = d;
+        }
+        if (minDist > maxArchErr) { maxArchErr = minDist; maxArchIdx = i; }
+      }
+      
+      if (maxLineErr <= e && maxLineErr <= maxArchErr * 1.5) { // Bias towards line
+        return [{ type: 'line', p0: f, p1: l }];
+      }
+      if (maxArchErr <= e) {
+        return [{ type: 'arch', p0: f, p1: l, p2: cp }];
+      }
+      
+      const splitIdx = maxLineErr < maxArchErr ? maxLineIdx : maxArchIdx;
+      if (splitIdx === 0 || splitIdx === pts.length - 1) return [{ type: 'line', p0: f, p1: l }];
+      
+      return fitPrimitives(pts.slice(0, splitIdx + 1), e).concat(fitPrimitives(pts.slice(splitIdx), e));
+    };
+
+    let shapeCount = 1;
+    paths.forEach(tr => {
+      const rdpTr = rdp(tr, 1.0); // pre-smooth
+      const primitives = fitPrimitives(rdpTr, 4.0);
+      
+      primitives.forEach(prim => {
+        if (prim.type === 'line') {
+          state.objects.push({
+            id: uid(), type: 'line', points: [prim.p0, prim.p1],
+            stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '자동 직선 ' + shapeCount++
+          });
+        } else if (prim.type === 'arch') {
+          state.objects.push({
+            id: uid(), type: 'arch', points: getArch(prim.p0, prim.p1, prim.p2),
+            controlPoints: [prim.p0, prim.p1, prim.p2],
+            stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '자동 곡선(호) ' + shapeCount++
+          });
+        }
       });
     });
   } else {
