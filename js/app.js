@@ -465,6 +465,49 @@ cv.addEventListener('wheel', e => {
   render();
 }, { passive: false });
 
+let initialPinchDist = null;
+let initialCamZ = null;
+let initialPinchW = null;
+
+cv.addEventListener('touchstart', e => {
+  if (e.touches.length === 2) {
+    e.preventDefault();
+    const t1 = e.touches[0], t2 = e.touches[1];
+    initialPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+    initialCamZ = state.cam.z;
+    const rect = cv.getBoundingClientRect();
+    const mx = (t1.clientX + t2.clientX) / 2 - rect.left;
+    const my = (t1.clientY + t2.clientY) / 2 - rect.top;
+    initialPinchW = s2w(mx, my);
+  }
+}, {passive: false});
+
+cv.addEventListener('touchmove', e => {
+  if (e.touches.length === 2 && initialPinchDist) {
+    e.preventDefault();
+    const t1 = e.touches[0], t2 = e.touches[1];
+    const dist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+    const scale = dist / initialPinchDist;
+    
+    state.cam.z = Math.max(0.15, Math.min(5, initialCamZ * scale));
+    
+    const rect = cv.getBoundingClientRect();
+    const mx = (t1.clientX + t2.clientX) / 2 - rect.left;
+    const my = (t1.clientY + t2.clientY) / 2 - rect.top;
+    
+    state.cam.x = initialPinchW.x - (mx - cv.width / 2) / state.cam.z;
+    state.cam.y = initialPinchW.y - (my - cv.height / 2) / state.cam.z;
+    
+    render();
+  }
+}, {passive: false});
+
+cv.addEventListener('touchend', e => {
+  if (e.touches.length < 2) {
+    initialPinchDist = null;
+  }
+});
+
 cv.addEventListener('contextmenu', e => e.preventDefault());
 
 // ─── Keyboard shortcuts ───
