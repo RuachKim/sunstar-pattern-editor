@@ -9,7 +9,6 @@ const state = {
   undoStack: [],
   redoStack: [],
   maxStitchLen: 30,
-  bgImage: null,
 };
 
 let drag = null, drawPts = null, drawStart = null, tempPos = null;
@@ -146,9 +145,7 @@ function chaikin(pts, n) {
 // ─── Rendering ───
 function drawGrid() {
   const W = cv.width, H = cv.height;
-  if (!state.bgImage) {
-    ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, W, H);
-  }
+  ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, W, H);
   const gz = 20 * state.cam.z;
   if (gz < 3) return;
   const ox = W / 2 - state.cam.x * state.cam.z;
@@ -222,20 +219,6 @@ function drawObj(o, idx) {
 }
 
 function render() {
-  if (state.bgImage) {
-    // Clear canvas before drawing background image
-    ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, cv.width, cv.height);
-    const W = state.bgImage.width;
-    const H = state.bgImage.height;
-    const scale = 400 / Math.max(W, H);
-    const sw = W * scale * state.cam.z;
-    const sh = H * scale * state.cam.z;
-    const c = w2s(0, 0);
-    ctx.globalAlpha = 0.5;
-    ctx.drawImage(state.bgImage, c.x - sw/2, c.y - sh/2, sw, sh);
-    ctx.globalAlpha = 1.0;
-  }
-  
   drawGrid();
 
   for (let i = 0; i < state.objects.length; i++) drawObj(state.objects[i], i);
@@ -735,26 +718,97 @@ btnCloseCamera.addEventListener('click', () => {
 btnCapture.addEventListener('click', () => {
   if (!cameraStream) return;
   const canvas = document.createElement('canvas');
-  canvas.width = cameraVideo.videoWidth;
-  canvas.height = cameraVideo.videoHeight;
+  const maxDim = 300; 
+  const scale = Math.min(maxDim / cameraVideo.videoWidth, maxDim / cameraVideo.videoHeight);
+  const w = Math.floor(cameraVideo.videoWidth * scale);
+  const h = Math.floor(cameraVideo.videoHeight * scale);
+  canvas.width = w; canvas.height = h;
   const tempCtx = canvas.getContext('2d');
-  tempCtx.drawImage(cameraVideo, 0, 0);
+  tempCtx.drawImage(cameraVideo, 0, 0, w, h);
   
-  const img = new Image();
-  img.onload = () => {
-    state.bgImage = img;
-    btnClearBg.style.display = 'inline-block';
-    render();
+  const imgData = tempCtx.getImageData(0, 0, w, h);
+  const data = imgData.data;
+  const gray = new Uint8Array(w * h);
+  for (let i = 0; i < w * h; i++) {
+    gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
+  }
+  
+  const S = Math.floor(w / 16);
+  const intImg = new Uint32Array(w * h);
+  for(let y=0; y<h; y++){
+    let sumLine = 0;
+    for(let x=0; x<w; x++){
+      const lum = gray[y*w + x];
+      sumLine += lum;
+      intImg[y*w + x] = (y > 0 ? intImg[(y-1)*w + x] : 0) + sumLine;
+    }
+  }
+  
+  const getSum = (x1, y1, x2, y2) => {
+    x1 = Math.max(0, x1); y1 = Math.max(0, y1);
+    x2 = Math.min(w-1, x2); y2 = Math.min(h-1, y2);
+    const a = (y1>0 && x1>0) ? intImg[(y1-1)*w + (x1-1)] : 0;
+    const b = (y1>0) ? intImg[(y1-1)*w + x2] : 0;
+    const c = (x1>0) ? intImg[y2*w + (x1-1)] : 0;
+    const d = intImg[y2*w + x2];
+    return d - b - c + a;
   };
-  img.src = canvas.toDataURL('image/jpeg', 0.8);
-  
-  btnCloseCamera.click();
-});
 
-btnClearBg.addEventListener('click', () => {
-  state.bgImage = null;
-  btnClearBg.style.display = 'none';
-  render();
+  const points = [];
+  const T = 0.85;
+  for (let y = 0; y < h; y += 2) {
+    for (let x = 0; x < w; x += 2) {
+      const area = (Math.min(w-1, x+S) - Math.max(0, x-S) + 1) * (Math.min(h-1, y+S) - Math.max(0, y-S) + 1);
+      const localAvg = getSum(x-S, y-S, x+S, y+S) / area;
+      if (gray[y*w + x] < localAvg * T) {
+         points.push({
+           x: (x - w/2) / scale,
+           y: (y - h/2) / scale,
+           visited: false
+         });
+      }
+    }
+  }
+  
+  if (points.length > 2) {
+    const path = [points[0]];
+    points[0].visited = true;
+    let curr = points[0];
+    
+    for (let i = 1; i < points.length; i++) {
+      let minDist = Infinity;
+      let bestIdx = -1;
+      for (let j = 0; j < points.length; j++) {
+        if (!points[j].visited) {
+          const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y);
+          if (d < minDist) { minDist = d; bestIdx = j; }
+        }
+      }
+      if (bestIdx !== -1) {
+        points[bestIdx].visited = true;
+        curr = points[bestIdx];
+        path.push(curr);
+      }
+    }
+    
+    const optimized = rdp(path, 6.0);
+    saveUndo();
+    state.objects.push({
+      id: uid(),
+      type: 'curve',
+      points: optimized,
+      stitch: 'running',
+      density: 2,
+      angle: 0,
+      color: '#4361ee',
+      name: '카메라 변환'
+    });
+  } else {
+    alert("패턴을 인식할 수 없습니다. 밝은 곳에서 진한 펜으로 그려보세요.");
+  }
+  
+  render(); updateUI();
+  btnCloseCamera.click();
 });
 
 // ─── Init ───
