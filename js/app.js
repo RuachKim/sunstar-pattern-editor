@@ -168,21 +168,21 @@ function chaikin(pts, n) {
 // ─── Rendering ───
 function drawGrid() {
   const W = cv.width, H = cv.height;
-  ctx.fillStyle = '#f8f9fa'; ctx.fillRect(0, 0, W, H);
+  ctx.clearRect(0, 0, W, H);
   const gz = 20 * state.cam.z;
   if (gz < 3) return;
   const ox = W / 2 - state.cam.x * state.cam.z;
   const oy = H / 2 - state.cam.y * state.cam.z;
 
-  ctx.strokeStyle = gz > 8 ? 'rgba(0,0,0,.05)' : 'rgba(0,0,0,.02)';
-  ctx.lineWidth = 0.5;
+  ctx.strokeStyle = gz > 8 ? 'rgba(255,255,255,.05)' : 'rgba(255,255,255,.02)';
+  ctx.lineWidth = 1;
   let sx = ox % gz; while (sx < 0) sx += gz;
   for (let x = sx; x < W; x += gz) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   let sy = oy % gz; while (sy < 0) sy += gz;
   for (let y = sy; y < H; y += gz) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
 
   const gz5 = gz * 5;
-  ctx.strokeStyle = 'rgba(0,0,0,.1)'; ctx.lineWidth = 0.5;
+  ctx.strokeStyle = 'rgba(255,255,255,.1)'; ctx.lineWidth = 1;
   let sx5 = ox % gz5; while (sx5 < 0) sx5 += gz5;
   for (let x = sx5; x < W; x += gz5) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
   let sy5 = oy % gz5; while (sy5 < 0) sy5 += gz5;
@@ -190,9 +190,9 @@ function drawGrid() {
 
   // Origin axes
   const o = w2s(0, 0);
-  ctx.strokeStyle = 'rgba(231,76,60,.5)'; ctx.lineWidth = 1;
+  ctx.strokeStyle = 'rgba(239,68,68,.6)'; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.stroke();
-  ctx.strokeStyle = 'rgba(46,204,113,.5)';
+  ctx.strokeStyle = 'rgba(16,185,129,.6)';
   ctx.beginPath(); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
 }
 
@@ -201,13 +201,25 @@ function drawObj(o, idx) {
   if (!pts || !pts.length) return;
   const c = o.color || '#4361ee';
 
-  ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-  ctx.beginPath();
-  let sp = w2s(pts[0].x, pts[0].y);
-  ctx.moveTo(sp.x, sp.y);
-  for (let i = 1; i < pts.length; i++) { sp = w2s(pts[i].x, pts[i].y); ctx.lineTo(sp.x, sp.y); }
   if (['fill', 'satin'].includes(o.stitch) && pts.length > 2) {
+    ctx.beginPath();
+    let sp = w2s(pts[0].x, pts[0].y);
+    ctx.moveTo(sp.x, sp.y);
+    for (let i = 1; i < pts.length; i++) { sp = w2s(pts[i].x, pts[i].y); ctx.lineTo(sp.x, sp.y); }
     ctx.globalAlpha = 0.12; ctx.fillStyle = c; ctx.fill(); ctx.globalAlpha = 1;
+  }
+
+  // Draw Stitches
+  const stitches = StitchEngine.objectToStitches(o, state.maxStitchLen);
+  ctx.strokeStyle = c; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.beginPath();
+  if (stitches && stitches.length > 0) {
+    let sp = w2s(stitches[0].x, stitches[0].y);
+    ctx.moveTo(sp.x, sp.y);
+    for (let i = 1; i < stitches.length; i++) { 
+       sp = w2s(stitches[i].x, stitches[i].y); 
+       ctx.lineTo(sp.x, sp.y); 
+    }
   }
   ctx.stroke();
 
@@ -640,18 +652,32 @@ document.querySelectorAll('.stitch-btn').forEach(b => {
 document.getElementById('sl-density').addEventListener('input', e => {
   const v = parseFloat(e.target.value);
   document.getElementById('val-density').textContent = v.toFixed(1);
-  if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].density = v; }
+  if (state.selectedIdx >= 0) { 
+    state.objects[state.selectedIdx].density = v; 
+    render();
+    const { totalCount } = StitchEngine.objectsToDSTStitches(state.objects, state.maxStitchLen);
+    document.getElementById('stat-stitches').textContent = totalCount.toLocaleString();
+    document.getElementById('stat-time').textContent = `~${Math.max(1, Math.round(totalCount / 800))}분`;
+  }
 });
 
 document.getElementById('sl-angle').addEventListener('input', e => {
   const v = parseInt(e.target.value);
   document.getElementById('val-angle').textContent = v + '°';
-  if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].angle = v; }
+  if (state.selectedIdx >= 0) { 
+    state.objects[state.selectedIdx].angle = v; 
+    render(); 
+  }
 });
 
 document.getElementById('inp-color').addEventListener('input', e => {
   document.getElementById('val-color').textContent = e.target.value;
-  if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].color = e.target.value; render(); updateUI(); }
+  if (state.selectedIdx >= 0) { 
+    state.objects[state.selectedIdx].color = e.target.value; 
+    render(); 
+    const selectedDot = objList.querySelector('.obj-item.selected .color-dot');
+    if (selectedDot) selectedDot.style.background = e.target.value;
+  }
 });
 
 document.getElementById('sl-maxlen').addEventListener('input', e => {
@@ -662,11 +688,14 @@ document.getElementById('sl-maxlen').addEventListener('input', e => {
 
 // ─── Buttons ───
 document.getElementById('btn-undo').addEventListener('click', undo);
-document.getElementById('btn-redo').addEventListener('click', redo);
+document.getElementById('btn-eraser-top').addEventListener('click', () => {
+  setTool('eraser');
+});
 document.getElementById('btn-clear-all').addEventListener('click', () => {
   if (state.objects.length === 0) return;
   saveUndo();
   state.objects = []; state.selectedIdx = -1;
+  drawPts = null; drawStart = null; tempPos = null; drag = null;
   render(); updateUI();
 });
 
@@ -1017,12 +1046,12 @@ btnCapture.addEventListener('click', () => {
     const prevCtx = cameraPreview.getContext('2d');
     cameraPreview.width = w; cameraPreview.height = h;
     prevCtx.drawImage(canvas, 0, 0);
-    prevCtx.fillStyle = 'rgba(0,0,0,0.4)';
+    prevCtx.fillStyle = 'rgba(0,0,0,0.2)';
     prevCtx.fillRect(0,0,w,h);
     
     // Draw detected lines
     prevCtx.strokeStyle = '#2ecc71';
-    prevCtx.lineWidth = 3;
+    prevCtx.lineWidth = 4;
     prevCtx.lineCap = 'round';
     prevCtx.lineJoin = 'round';
     
