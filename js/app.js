@@ -1056,10 +1056,13 @@ btnCapture.addEventListener('click', () => {
     prevCtx.lineJoin = 'round';
     
     pendingPatternObjects.forEach(obj => {
+      const stitches = StitchEngine.objectToStitches(obj, state.maxStitchLen);
       prevCtx.beginPath();
-      prevCtx.moveTo(obj.points[0].x * scale + w/2, obj.points[0].y * scale + h/2);
-      for(let i=1; i<obj.points.length; i++) {
-        prevCtx.lineTo(obj.points[i].x * scale + w/2, obj.points[i].y * scale + h/2);
+      if (stitches && stitches.length > 0) {
+        prevCtx.moveTo(stitches[0].x * scale + w/2, stitches[0].y * scale + h/2);
+        for(let i=1; i<stitches.length; i++) {
+          prevCtx.lineTo(stitches[i].x * scale + w/2, stitches[i].y * scale + h/2);
+        }
       }
       prevCtx.stroke();
       
