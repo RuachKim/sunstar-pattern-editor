@@ -13,6 +13,29 @@ const state = {
 
 let drag = null, drawPts = null, drawStart = null, tempPos = null;
 let panning = false, panStart = null;
+let pendingPatternObjects = []; // Stores captured objects before applying
+
+function showToast(message, type = 'success') {
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const toast = document.createElement('div');
+  const bg = type === 'error' ? 'rgba(231,76,60,0.95)' : 'rgba(46,204,113,0.95)';
+  toast.style.cssText = `background:${bg}; color:#fff; padding:12px 24px; border-radius:12px; font-size:14px; font-weight:500; box-shadow:0 8px 24px rgba(0,0,0,0.2); backdrop-filter:blur(8px); transform:translateX(100%); opacity:0; transition:all 0.3s cubic-bezier(0.4, 0, 0.2, 1); display:flex; align-items:center; gap:8px;`;
+  toast.innerHTML = `<span style="font-size:18px">${type === 'error' ? '⚠️' : '✨'}</span> ${message}`;
+  container.appendChild(toast);
+  
+  // Trigger animation
+  requestAnimationFrame(() => {
+    toast.style.transform = 'translateX(0)';
+    toast.style.opacity = '1';
+  });
+  
+  setTimeout(() => {
+    toast.style.transform = 'translateX(100%)';
+    toast.style.opacity = '0';
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
 
 const guides = {
   line: "시작점과 끝점을 찍으세요.",
@@ -731,11 +754,17 @@ document.getElementById('btn-mirror-copy').addEventListener('click', () => {
 
 // ─── Camera Feature ───
 const btnCamera = document.getElementById('btn-camera');
-const btnClearBg = document.getElementById('btn-clear-bg');
 const cameraModal = document.getElementById('camera-modal');
 const cameraVideo = document.getElementById('camera-video');
+const cameraPreview = document.getElementById('camera-preview');
+const cameraGuideline = document.getElementById('camera-guideline');
+const cameraMessage = document.getElementById('camera-message');
+const cameraControls = document.getElementById('camera-controls');
+const cameraPreviewControls = document.getElementById('camera-preview-controls');
 const btnCapture = document.getElementById('btn-capture');
 const btnCloseCamera = document.getElementById('btn-close-camera');
+const btnApplyPattern = document.getElementById('btn-apply-pattern');
+const btnRecapture = document.getElementById('btn-recapture');
 
 let cameraStream = null;
 
@@ -898,7 +927,7 @@ btnCapture.addEventListener('click', () => {
   }
   
   if (paths.length > 0) {
-    saveUndo();
+    pendingPatternObjects = [];
     
     const fitPrimitives = (pts, e) => {
       if (pts.length <= 2) return [{ type: 'line', p0: pts[0], p1: pts[pts.length-1] }];
@@ -970,12 +999,12 @@ btnCapture.addEventListener('click', () => {
             }
           }
           
-          state.objects.push({
+          pendingPatternObjects.push({
             id: uid(), type: 'line', points: [prim.p0, prim.p1],
             stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '자동 직선 ' + shapeCount++
           });
         } else if (prim.type === 'arch') {
-          state.objects.push({
+          pendingPatternObjects.push({
             id: uid(), type: 'arch', points: getArch(prim.p0, prim.p1, prim.p2),
             controlPoints: [prim.p0, prim.p1, prim.p2],
             stitch: 'running', density: 2, angle: 0, color: '#4361ee', name: '자동 곡선(호) ' + shapeCount++
@@ -983,12 +1012,70 @@ btnCapture.addEventListener('click', () => {
         }
       });
     });
+
+    // Draw preview
+    const prevCtx = cameraPreview.getContext('2d');
+    cameraPreview.width = w; cameraPreview.height = h;
+    prevCtx.drawImage(canvas, 0, 0);
+    prevCtx.fillStyle = 'rgba(0,0,0,0.4)';
+    prevCtx.fillRect(0,0,w,h);
+    
+    // Draw detected lines
+    prevCtx.strokeStyle = '#2ecc71';
+    prevCtx.lineWidth = 3;
+    prevCtx.lineCap = 'round';
+    prevCtx.lineJoin = 'round';
+    
+    pendingPatternObjects.forEach(obj => {
+      prevCtx.beginPath();
+      prevCtx.moveTo(obj.points[0].x * scale + w/2, obj.points[0].y * scale + h/2);
+      for(let i=1; i<obj.points.length; i++) {
+        prevCtx.lineTo(obj.points[i].x * scale + w/2, obj.points[i].y * scale + h/2);
+      }
+      prevCtx.stroke();
+      
+      // Draw nodes
+      if (obj.controlPoints) {
+        prevCtx.fillStyle = '#fff';
+        obj.controlPoints.forEach(cp => {
+          prevCtx.beginPath();
+          prevCtx.arc(cp.x * scale + w/2, cp.y * scale + h/2, 4, 0, Math.PI*2);
+          prevCtx.fill();
+        });
+      }
+    });
+
+    cameraVideo.style.display = 'none';
+    cameraGuideline.style.display = 'none';
+    cameraPreview.style.display = 'block';
+    cameraControls.style.display = 'none';
+    cameraPreviewControls.style.display = 'flex';
+    cameraMessage.style.display = 'none';
+
   } else {
-    alert("패턴을 인식할 수 없습니다. 밝은 곳에서 진한 펜으로 그려보세요.");
+    cameraMessage.style.display = 'block';
+    setTimeout(() => { cameraMessage.style.display = 'none'; }, 3000);
   }
-  
-  render(); updateUI();
+});
+
+btnApplyPattern.addEventListener('click', () => {
+  if (pendingPatternObjects.length > 0) {
+    saveUndo();
+    state.objects.push(...pendingPatternObjects);
+    pendingPatternObjects = [];
+    render(); updateUI();
+    showToast('패턴이 성공적으로 적용되었습니다.', 'success');
+  }
   btnCloseCamera.click();
+});
+
+btnRecapture.addEventListener('click', () => {
+  pendingPatternObjects = [];
+  cameraPreview.style.display = 'none';
+  cameraVideo.style.display = 'block';
+  cameraGuideline.style.display = 'block';
+  cameraPreviewControls.style.display = 'none';
+  cameraControls.style.display = 'flex';
 });
 
 // ─── Init ───

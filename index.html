@@ -27,18 +27,28 @@
   </header>
 
   <!-- Camera Modal -->
-  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:9999; flex-direction:column; align-items:center; justify-content:center;">
-    <div style="position:relative; width: 90%; max-width: 640px;">
-      <video id="camera-video" autoplay playsinline style="width:100%; border:2px solid #4361ee; border-radius:8px;"></video>
+  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 15, 26, 0.9); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter: blur(12px);">
+    <div style="position:relative; width: 90%; max-width: 640px; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 48px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);">
+      <video id="camera-video" autoplay playsinline style="width:100%; display:block;"></video>
+      <canvas id="camera-preview" style="position:absolute; top:0; left:0; width:100%; height:100%; display:none; object-fit:contain; background:rgba(0,0,0,0.8);"></canvas>
       <!-- Guideline overlay -->
-      <div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:70%; height:70%; border:2px dashed rgba(255,255,255,0.6); pointer-events:none;">
-        <div style="position:absolute; top:0; left:50%; width:1px; height:100%; background:rgba(255,255,255,0.4);"></div>
-        <div style="position:absolute; top:50%; left:0; width:100%; height:1px; background:rgba(255,255,255,0.4);"></div>
+      <div id="camera-guideline" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:85%; height:85%; border:2px dashed rgba(255,255,255,0.5); pointer-events:none; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.4);">
+        <div style="position:absolute; top:0; left:50%; width:1px; height:100%; background:rgba(255,255,255,0.3);"></div>
+        <div style="position:absolute; top:50%; left:0; width:100%; height:1px; background:rgba(255,255,255,0.3);"></div>
+        <div style="position:absolute; top:-2px; left:-2px; width:20px; height:20px; border-top:3px solid #fff; border-left:3px solid #fff;"></div>
+        <div style="position:absolute; top:-2px; right:-2px; width:20px; height:20px; border-top:3px solid #fff; border-right:3px solid #fff;"></div>
+        <div style="position:absolute; bottom:-2px; left:-2px; width:20px; height:20px; border-bottom:3px solid #fff; border-left:3px solid #fff;"></div>
+        <div style="position:absolute; bottom:-2px; right:-2px; width:20px; height:20px; border-bottom:3px solid #fff; border-right:3px solid #fff;"></div>
       </div>
+      <div id="camera-message" style="position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(231,76,60,0.95); color:white; padding:10px 20px; border-radius:30px; font-size:14px; display:none; white-space:nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-weight: 500; backdrop-filter: blur(4px);">패턴을 인식할 수 없습니다. 다시 촬영해주세요.</div>
     </div>
-    <div style="margin-top:20px; display:flex; gap:16px;">
-      <button id="btn-capture" class="btn-sm" style="font-size:16px; padding:12px 24px; background:#2ecc71; color:#fff; border:none; border-radius:4px; cursor:pointer;">📸 촬영하기</button>
-      <button id="btn-close-camera" class="btn-sm btn-danger" style="font-size:16px; padding:12px 24px;">취소</button>
+    <div style="margin-top:30px; display:flex; gap:16px;" id="camera-controls">
+      <button id="btn-capture" class="btn-lg btn-primary" style="font-size:16px; padding:14px 28px;">📸 촬영하기</button>
+      <button id="btn-close-camera" class="btn-lg btn-secondary" style="font-size:16px; padding:14px 28px;">취소</button>
+    </div>
+    <div style="margin-top:30px; display:none; gap:16px;" id="camera-preview-controls">
+      <button id="btn-apply-pattern" class="btn-lg btn-primary" style="font-size:16px; padding:14px 28px;">✨ 이 패턴 적용</button>
+      <button id="btn-recapture" class="btn-lg btn-secondary" style="font-size:16px; padding:14px 28px;">🔄 다시 촬영</button>
     </div>
   </div>
 
@@ -151,11 +161,14 @@
   <footer id="statusbar">
     <span id="status-tool">도구: 선택</span>
     <span id="status-objs">오브젝트: 0</span>
-    <label style="display:flex; align-items:center; gap:4px; cursor:pointer;">
-      <input type="checkbox" id="chk-snap" checked> 스냅 (1mm)
+    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" class="snap-toggle">
+      <input type="checkbox" id="chk-snap" checked> <span class="snap-label">스냅 (1mm)</span>
     </label>
-    <span style="margin-left:auto">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
+    <span style="margin-left:auto; opacity: 0.7;">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
   </footer>
+
+  <!-- Toast Container -->
+  <div id="toast-container" style="position:fixed; top:24px; right:24px; z-index:10000; display:flex; flex-direction:column; gap:12px; pointer-events:none;"></div>
 </div>
 
 <script type="module" src="js/app.js"></script>
