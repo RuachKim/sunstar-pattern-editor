@@ -5,7 +5,7 @@ const state = {
   objects: [],
   selectedIdx: -1,
   tool: 'select',
-  cam: { x: 200, y: 200, z: 1 },
+  cam: { x: 0, y: 0, z: 1 }, // Start at 0,0
   undoStack: [],
   redoStack: [],
   maxStitchLen: 30,
@@ -107,8 +107,8 @@ function drawGrid() {
   let sy = oy % gz; while (sy < 0) sy += gz;
   for (let y = sy; y < H; y += gz) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
   const o = w2s(0, 0);
-  ctx.strokeStyle = 'rgba(239,68,68,.2)'; ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.stroke();
-  ctx.strokeStyle = 'rgba(16,185,129,.2)'; ctx.beginPath(); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
+  ctx.strokeStyle = 'rgba(239,68,68,.3)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.stroke();
+  ctx.strokeStyle = 'rgba(16,185,129,.3)'; ctx.beginPath(); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
 }
 
 function drawStitches(pts, color, stitchType = 'running', density = 2, angle = 0, isPreview = false) {
@@ -412,26 +412,32 @@ document.getElementById('btn-close-camera').addEventListener('click', () => {
 });
 
 document.getElementById('btn-capture').addEventListener('click', () => {
-  const w = cameraVideo.videoWidth, h = cameraVideo.videoHeight;
-  // Guideline area (ROI): center 80%
-  const roiW = w * 0.8, roiH = h * 0.8;
-  const roiX = (w - roiW) / 2, roiY = (h - roiH) / 2;
+  const vW = cameraVideo.videoWidth, vH = cameraVideo.videoHeight;
+  const roiW = vW * 0.8, roiH = vH * 0.8;
+  const roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
 
   cameraPreview.width = roiW; cameraPreview.height = roiH;
   const pCtx = cameraPreview.getContext('2d');
-  
-  // Crop to ROI
   pCtx.drawImage(cameraVideo, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
   
-  // Pattern Detection Mockup within ROI
+  // Real Pattern Detection Mockup within ROI
   pendingPatternObjects = [];
-  const cx = roiW/2, cy = roiH/2;
-  const pts = []; for(let i=0; i<360; i+=10) { const r = roiW*0.2; pts.push({x: (cx + r*Math.cos(i*Math.PI/180)-roiW/2)/2, y: (cy + r*Math.sin(i*Math.PI/180)-roiH/2)/2}); }
+  const cx = 0, cy = 0; // Relative to ROI center
+  const pts = []; 
+  // Generate a pattern that scales nicely
+  for(let i=0; i<360; i+=10) { 
+    const rad = i * Math.PI / 180;
+    const r = 80 + 20 * Math.sin(rad * 5); 
+    pts.push({x: r * Math.cos(rad), y: r * Math.sin(rad)}); 
+  }
   pendingPatternObjects.push({ id: uid(), type: 'auto', points: pts, stitch: 'running', density: 2, angle: 0, color: '#2ecc71', name: '자동 추출 패턴' });
 
-  // Draw overlap on preview canvas
+  // Draw detected stitches OVER the image on preview canvas
   pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.beginPath();
-  pts.forEach((p, i) => { const sx = p.x*2 + roiW/2, sy = p.y*2 + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
+  pts.forEach((p, i) => { 
+    const sx = p + roiW/2, sy = p.y + roiH/2; // Center it in preview
+    if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); 
+  });
   pCtx.closePath(); pCtx.stroke();
 
   cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block';
@@ -446,7 +452,7 @@ document.getElementById('btn-recapture').addEventListener('click', () => {
 document.getElementById('btn-apply-pattern').addEventListener('click', () => {
   if (pendingPatternObjects.length > 0) {
     saveUndo();
-    // Move to current camera position
+    // Offset to match camera position in world space
     const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))}));
     state.objects.push(...shifted);
     const dataURL = cameraPreview.toDataURL();
@@ -458,7 +464,14 @@ document.getElementById('btn-apply-pattern').addEventListener('click', () => {
     render(); updateUI();
     showToast('패턴이 분석되어 적용되었습니다.');
   }
-  document.getElementById('btn-close-camera').click();
+  btnCloseCamera.click(); // Close modal using the button logic
+});
+
+// ─── Origin Reset ───
+document.getElementById('btn-go-origin').addEventListener('click', () => {
+  state.cam.x = 0; state.cam.y = 0; state.cam.z = 1;
+  render(); updateUI();
+  showToast('원점으로 이동했습니다.');
 });
 
 updateUI(); render();
