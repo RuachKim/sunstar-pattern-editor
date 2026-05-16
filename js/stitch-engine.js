@@ -1,17 +1,11 @@
 /**
  * Stitch Engine — 오브젝트를 실제 바늘 좌표로 변환
- * Running, Satin, Fill/Tatami 스티치 지원
+ * Running, Satin, Fill, Chain, French Knot 스티치 지원
  */
 
 export class StitchEngine {
-  // ─── 유틸리티 ───
-  static dist(a, b) {
-    return Math.hypot(a.x - b.x, a.y - b.y);
-  }
-
-  static lerp(a, b, t) {
-    return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
-  }
+  static dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
+  static lerp(a, b, t) { return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t }; }
 
   static interpolatePath(pts, step) {
     if (pts.length < 2) return [...pts];
@@ -20,9 +14,7 @@ export class StitchEngine {
       const d = StitchEngine.dist(pts[i - 1], pts[i]);
       if (d < 0.01) continue;
       const n = Math.max(1, Math.ceil(d / step));
-      for (let j = 1; j <= n; j++) {
-        result.push(StitchEngine.lerp(pts[i - 1], pts[i], j / n));
-      }
+      for (let j = 1; j <= n; j++) result.push(StitchEngine.lerp(pts[i - 1], pts[i], j / n));
     }
     return result;
   }
@@ -32,23 +24,12 @@ export class StitchEngine {
     const result = [];
     for (let i = 0; i < pts.length; i++) {
       let dx, dy;
-      if (i === 0) {
-        dx = pts[1].x - pts[0].x;
-        dy = pts[1].y - pts[0].y;
-      } else if (i === pts.length - 1) {
-        dx = pts[i].x - pts[i - 1].x;
-        dy = pts[i].y - pts[i - 1].y;
-      } else {
-        dx = pts[i + 1].x - pts[i - 1].x;
-        dy = pts[i + 1].y - pts[i - 1].y;
-      }
+      if (i === 0) { dx = pts[1].x - pts[0].x; dy = pts[1].y - pts[0].y; }
+      else if (i === pts.length - 1) { dx = pts[i].x - pts[i - 1].x; dy = pts[i].y - pts[i - 1].y; }
+      else { dx = pts[i + 1].x - pts[i - 1].x; dy = pts[i + 1].y - pts[i - 1].y; }
       const len = Math.hypot(dx, dy);
-      if (len < 0.01) {
-        result.push({ x: pts[i].x, y: pts[i].y });
-        continue;
-      }
-      const nx = -dy / len;
-      const ny = dx / len;
+      if (len < 0.01) { result.push({ ...pts[i] }); continue; }
+      const nx = -dy / len, ny = dx / len;
       result.push({ x: pts[i].x + nx * offset, y: pts[i].y + ny * offset });
     }
     return result;
@@ -57,20 +38,18 @@ export class StitchEngine {
   static bbox(pts) {
     let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
     for (const p of pts) {
-      if (p.x < x1) x1 = p.x;
-      if (p.y < y1) y1 = p.y;
-      if (p.x > x2) x2 = p.x;
-      if (p.y > y2) y2 = p.y;
+      if (p.x < x1) x1 = p.x; if (p.y < y1) y1 = p.y;
+      if (p.x > x2) x2 = p.x; if (p.y > y2) y2 = p.y;
     }
     return { x1, y1, x2, y2 };
   }
 
-  // ─── Running Stitch ───
+  // ─── Stitch Generators ───
+
   static generateRunning(obj, maxLen = 30) {
     return StitchEngine.interpolatePath(obj.points, maxLen / 10.0);
   }
 
-  // ─── Satin Stitch ───
   static generateSatin(obj, maxLen = 30) {
     const pts = obj.points;
     const density = obj.density || 2.0;
@@ -82,196 +61,167 @@ export class StitchEngine {
     const n = Math.min(interpLeft.length, interpRight.length);
     const result = [];
     for (let i = 0; i < n; i++) {
-      if (i % 2 === 0) {
-        result.push(interpLeft[i]);
-        result.push(interpRight[i]);
-      } else {
-        result.push(interpRight[i]);
-        result.push(interpLeft[i]);
+      if (i % 2 === 0) { result.push(interpLeft[i]); result.push(interpRight[i]); }
+      else { result.push(interpRight[i]); result.push(interpLeft[i]); }
+    }
+    return result;
+  }
+
+  static generateFill(obj, maxLen = 30) {
+    const pts = obj.points;
+    if (pts.length < 3) return StitchEngine.generateRunning(obj, maxLen);
+    const density = obj.density || 2.0;
+    const angle = ((obj.angle || 0) * Math.PI) / 180;
+    const { x1, y1, x2, y2 } = StitchEngine.bbox(pts);
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+    const diag = Math.hypot(x2 - x1, y2 - y1) / 2 + 10;
+    const cosA = Math.cos(angle), sinA = Math.sin(angle);
+    const result = [];
+    let row = 0, offset = -diag;
+    while (offset <= diag) {
+      const lx1 = cx + (-diag) * cosA - offset * sinA, ly1 = cy + (-diag) * sinA + offset * cosA;
+      const lx2 = cx + diag * cosA - offset * sinA, ly2 = cy + diag * sinA + offset * cosA;
+      const intersections = [];
+      for (let i = 0; i < pts.length; i++) {
+        const p1 = pts[i], p2 = pts[(i + 1) % pts.length];
+        const denom = (p2.x - p1.x) * (ly2 - ly1) - (p2.y - p1.y) * (lx2 - lx1);
+        if (Math.abs(denom) < 1e-10) continue;
+        const t = ((lx1 - p1.x) * (ly2 - ly1) - (ly1 - p1.y) * (lx2 - lx1)) / denom;
+        const u = ((lx1 - p1.x) * (p2.y - p1.y) - (ly1 - p1.y) * (p2.x - p1.x)) / denom;
+        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) intersections.push({ x: p1.x + t * (p2.x - p1.x), y: p1.y + t * (p2.y - p1.y), u });
+      }
+      intersections.sort((a, b) => a.u - b.u);
+      for (let i = 0; i < intersections.length - 1; i += 2) {
+        let s = intersections[i], e = intersections[i + 1];
+        if (row % 2 === 1) [s, e] = [e, s];
+        result.push(...StitchEngine.interpolatePath([s, e], maxLen / 10.0));
+      }
+      offset += density; row++;
+    }
+    return result.length > 0 ? result : StitchEngine.generateRunning(obj, maxLen);
+  }
+
+  static generateChain(obj, maxLen = 30) {
+    const pts = obj.points;
+    const step = 8; // Chain loop size
+    const result = [];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const d = StitchEngine.dist(pts[i], pts[i + 1]);
+      const n = Math.max(1, Math.ceil(d / step));
+      for (let j = 0; j < n; j++) {
+        const p1 = StitchEngine.lerp(pts[i], pts[i + 1], j / n);
+        const p2 = StitchEngine.lerp(pts[i], pts[i + 1], (j + 0.8) / n);
+        const mid = StitchEngine.lerp(p1, p2, 0.5);
+        const dx = p2.x - p1.x, dy = p2.y - p1.y, len = Math.hypot(dx, dy) || 1;
+        const nx = -dy / len * 4, ny = dx / len * 4;
+        result.push(p1, { x: mid.x + nx, y: mid.y + ny }, p2, { x: mid.x - nx, y: mid.y - ny }, p1, p2);
       }
     }
     return result;
   }
 
-  // ─── Fill / Tatami Stitch ───
-  static generateFill(obj, maxLen = 30) {
+  static generateFrenchKnot(obj) {
     const pts = obj.points;
-    if (pts.length < 3) return StitchEngine.interpolatePath(pts, maxLen / 10.0);
-
-    const density = obj.density || 2.0;
-    const angleDeg = obj.angle || 0;
-    const angle = (angleDeg * Math.PI) / 180;
-    const { x1, y1, x2, y2 } = StitchEngine.bbox(pts);
-    const cx = (x1 + x2) / 2;
-    const cy = (y1 + y2) / 2;
-    const diag = Math.hypot(x2 - x1, y2 - y1) / 2 + 10;
-    const cosA = Math.cos(angle);
-    const sinA = Math.sin(angle);
-
     const result = [];
-    let row = 0;
-    let offset = -diag;
-
-    while (offset <= diag) {
-      const lx1 = cx + (-diag) * cosA - offset * sinA;
-      const ly1 = cy + (-diag) * sinA + offset * cosA;
-      const lx2 = cx + diag * cosA - offset * sinA;
-      const ly2 = cy + diag * sinA + offset * cosA;
-
-      // Find intersections with polygon edges
-      const intersections = [];
-      for (let i = 0; i < pts.length - 1; i++) {
-        const ax = pts[i].x, ay = pts[i].y;
-        const bx = pts[i + 1].x, by = pts[i + 1].y;
-        const denom = (bx - ax) * (ly2 - ly1) - (by - ay) * (lx2 - lx1);
-        if (Math.abs(denom) < 1e-10) continue;
-        const t = ((lx1 - ax) * (ly2 - ly1) - (ly1 - ay) * (lx2 - lx1)) / denom;
-        const u = ((lx1 - ax) * (by - ay) - (ly1 - ay) * (bx - ax)) / denom;
-        if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
-          intersections.push({
-            x: ax + t * (bx - ax),
-            y: ay + t * (by - ay),
-            u
-          });
-        }
+    for (const p of pts) {
+      const r = 3;
+      for (let i = 0; i < 6; i++) {
+        const t = (i / 6) * Math.PI * 2;
+        result.push(p, { x: p.x + r * Math.cos(t), y: p.y + r * Math.sin(t) });
       }
-
-      intersections.sort((a, b) => a.u - b.u);
-
-      for (let i = 0; i < intersections.length - 1; i += 2) {
-        let segStart = intersections[i];
-        let segEnd = intersections[i + 1];
-        if (row % 2 === 1) [segStart, segEnd] = [segEnd, segStart];
-        const seg = StitchEngine.interpolatePath([segStart, segEnd], maxLen / 10.0);
-        result.push(...seg);
-      }
-
-      offset += density;
-      row++;
+      result.push(p);
     }
-
-    return result.length > 0 ? result : StitchEngine.interpolatePath(pts, maxLen / 10.0);
+    return result;
   }
 
-  // ─── 오브젝트 → 스티치 좌표 변환 ───
   static objectToStitches(obj, maxLen = 30) {
-    const stType = obj.stitch || 'running';
-    switch (stType) {
+    switch (obj.stitch) {
       case 'satin': return StitchEngine.generateSatin(obj, maxLen);
       case 'fill': return StitchEngine.generateFill(obj, maxLen);
+      case 'chain': return StitchEngine.generateChain(obj, maxLen);
+      case 'knot': return StitchEngine.generateFrenchKnot(obj);
       default: return StitchEngine.generateRunning(obj, maxLen);
     }
   }
 
-  // ─── 전체 오브젝트 배열 → DST 스티치 명령 ───
   static objectsToDSTStitches(objects, maxStitchLen = 30) {
     const stitches = [];
     let totalCount = 0;
-
     for (const obj of objects) {
       const pts = StitchEngine.objectToStitches(obj, maxStitchLen);
       if (!pts || pts.length === 0) continue;
-
-      // Jump to first point
       stitches.push({ x: pts[0].x * 10, y: pts[0].y * 10, cmd: 'jump' });
-
-      for (let i = 1; i < pts.length; i++) {
-        stitches.push({ x: pts[i].x * 10, y: pts[i].y * 10, cmd: 'stitch' });
-        totalCount++;
-      }
+      for (let i = 1; i < pts.length; i++) { stitches.push({ x: pts[i].x * 10, y: pts[i].y * 10, cmd: 'stitch' }); totalCount++; }
     }
-
     stitches.push({ x: 0, y: 0, cmd: 'end' });
     return { stitches, totalCount };
   }
 }
 
-// ─── 프리셋 패턴 생성기 ───
 export class PatternPresets {
-  static zigzag(width = 200, height = 60, repeats = 5) {
+  static floral(cx = 0, cy = 0) {
     const pts = [];
-    const step = repeats > 0 ? width / (repeats * 2) : width;
-    for (let i = 0; i <= repeats * 2; i++) {
-      pts.push({ x: i * step, y: i % 2 === 1 ? height : 0 });
+    for (let i = 0; i < 5; i++) {
+      const angle = (i / 5) * Math.PI * 2;
+      for (let t = 0; t <= Math.PI; t += 0.2) {
+        const r = 40 * Math.sin(t);
+        const x = cx + r * Math.cos(angle + t - Math.PI/2);
+        const y = cy + r * Math.sin(angle + t - Math.PI/2);
+        pts.push({ x, y });
+      }
+      pts.push({ x: cx, y: cy });
     }
     return pts;
   }
 
-  static scallop(width = 200, height = 40, repeats = 4, ppc = 16) {
+  static bohemian(cx = 0, cy = 0) {
     const pts = [];
-    if (repeats === 0) return [{ x: 0, y: 0 }, { x: width, y: 0 }];
-    const step = width / (repeats * ppc);
-    for (let i = 0; i <= repeats * ppc; i++) {
-      const t = ((i % ppc) / ppc) * Math.PI;
-      pts.push({ x: i * step, y: height * Math.sin(t) });
+    for (let t = -Math.PI; t <= Math.PI; t += 0.1) {
+      const r = 50 * (1 + Math.sin(t)) * (1 + 0.3 * Math.cos(8 * t));
+      pts.push({ x: cx + r * Math.cos(t), y: cy + r * Math.sin(t) });
     }
     return pts;
   }
 
-  static clover(diameter = 120, n = 80) {
+  static geometry(cx = 0, cy = 0) {
     const pts = [];
-    const a = diameter / 2;
-    for (let i = 0; i <= n; i++) {
-      const t = (i / n) * 2 * Math.PI;
-      const r = a * Math.cos(2 * t);
-      pts.push({ x: r * Math.cos(t) + a, y: r * Math.sin(t) + a });
+    for (let i = 0; i < 3; i++) {
+      const s = 30 + i * 20;
+      pts.push({ x: cx - s, y: cy - s }, { x: cx + s, y: cy - s }, { x: cx + s, y: cy + s }, { x: cx - s, y: cy + s }, { x: cx - s, y: cy - s });
+      pts.push({ x: cx, y: cy }); // Jump back
     }
     return pts;
   }
 
-  static diamond(width = 120, height = 120) {
-    return [
-      { x: width / 2, y: 0 },
-      { x: width, y: height / 2 },
-      { x: width / 2, y: height },
-      { x: 0, y: height / 2 },
-      { x: width / 2, y: 0 },
-    ];
-  }
-
-  static rect(w = 100, h = 80) {
-    return [
-      { x: 0, y: 0 }, { x: w, y: 0 },
-      { x: w, y: h }, { x: 0, y: h }, { x: 0, y: 0 }
-    ];
-  }
-
-  static ellipse(rx = 60, ry = 60, n = 48) {
+  static sashiko(cx = 0, cy = 0) {
     const pts = [];
-    for (let i = 0; i <= n; i++) {
-      const t = (i / n) * 2 * Math.PI;
-      pts.push({ x: rx + rx * Math.cos(t), y: ry + ry * Math.sin(t) });
+    const s = 40;
+    for (let x = -1; x <= 1; x++) {
+      for (let y = -1; y <= 1; y++) {
+        const ox = cx + x * s, oy = cy + y * s;
+        pts.push({ x: ox - 15, y: oy }, { x: ox + 15, y: oy });
+        pts.push({ x: ox, y: oy - 15 }, { x: ox, y: oy + 15 });
+      }
     }
     return pts;
   }
 
-  static star(outerR = 80, innerR = 35, points = 5) {
+  static smocking(cx = 0, cy = 0) {
     const pts = [];
-    const total = points * 2;
-    for (let i = 0; i <= total; i++) {
-      const angle = (i / total) * Math.PI * 2 - Math.PI / 2;
-      const r = i % 2 === 0 ? outerR : innerR;
-      pts.push({ x: outerR + r * Math.cos(angle), y: outerR + r * Math.sin(angle) });
+    const s = 25;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        const x = cx + i * s, y = cy + j * s + (i % 2) * (s / 2);
+        pts.push({ x: x - 5, y: y - 5 }, { x: x + 5, y: y + 5 });
+        pts.push({ x: x + 5, y: y - 5 }, { x: x - 5, y: y + 5 });
+      }
     }
     return pts;
   }
 
-  static heart(size = 100) {
-    const pts = [];
-    const n = 60;
-    for (let i = 0; i <= n; i++) {
-      const t = (i / n) * 2 * Math.PI;
-      const x = 16 * Math.pow(Math.sin(t), 3);
-      const y = -(13 * Math.cos(t) - 5 * Math.cos(2 * t) - 2 * Math.cos(3 * t) - Math.cos(4 * t));
-      pts.push({ x: (x / 16) * (size / 2) + size / 2, y: (y / 16) * (size / 2) + size / 2 });
-    }
-    return pts;
-  }
-
-  static shiftPoints(pts, left = 50, top = 50) {
+  static shiftPoints(pts, left = 200, top = 200) {
     if (!pts || pts.length === 0) return pts;
-    const mx = Math.min(...pts.map(p => p.x));
-    const my = Math.min(...pts.map(p => p.y));
-    return pts.map(p => ({ x: p.x - mx + left, y: p.y - my + top }));
+    const minX = Math.min(...pts.map(p => p.x)), minY = Math.min(...pts.map(p => p.y));
+    return pts.map(p => ({ x: p.x - minX + left, y: p.y - minY + top }));
   }
 }

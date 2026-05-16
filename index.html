@@ -29,11 +29,13 @@
       <div class="stitch-sub-menu">
         <button class="tool-btn sub-btn" data-tool="line"><span>📏</span><span class="tooltip">직선 (L)</span></button>
         <button class="tool-btn sub-btn" data-tool="arch"><span>🌙</span><span class="tooltip">호/곡선 (A)</span></button>
+        <button class="tool-btn sub-btn" data-tool="curve"><span>🖌</span><span class="tooltip">자유곡선 (F)</span></button>
+        <button class="tool-btn sub-btn" data-tool="circle"><span>⭕</span><span class="tooltip">원 (C)</span></button>
+        <button class="tool-btn sub-btn" data-tool="rect"><span>⬜</span><span class="tooltip">사각형 (R)</span></button>
       </div>
     </div>
 
     <button class="tool-btn" data-tool="node"><span>📍</span><span class="tooltip">노드편집 (N)</span></button>
-    <button class="tool-btn" data-tool="curve"><span>🖌</span><span class="tooltip">자유곡선 (F)</span></button>
     <button class="tool-btn" data-tool="eraser"><span>🧹</span><span class="tooltip">지우기 (E)</span></button>
     
     <div style="margin-top: auto;">
@@ -51,7 +53,7 @@
   </header>
 
   <!-- 카메라 모달 -->
-  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.9); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter: blur(12px);">
+  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.95); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter: blur(12px);">
     <div style="position:relative; width: 90%; max-width: 800px; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 48px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); background: #000;">
       <video id="camera-video" autoplay playsinline style="width:100%; display:block;"></video>
       <canvas id="camera-preview" style="position:absolute; top:0; left:0; width:100%; height:100%; display:none; object-fit:contain; background:transparent;"></canvas>
@@ -68,27 +70,47 @@
     </div>
   </div>
 
-  <!-- 왼쪽 패널 (트레이스 설정) -->
+  <!-- 왼쪽 패널 (트레이스 및 패턴) -->
   <aside id="left-panel">
     <div class="panel-section">
       <div class="panel-title">트레이스 설정</div>
-      <div class="preset-grid">
-        <button class="preset-btn" title="밝기"><span class="icon">☀</span></button>
-        <button class="preset-btn" title="대비"><span class="icon">◑</span></button>
-        <button class="preset-btn" title="추가"><span class="icon">＋</span></button>
-        <button class="preset-btn" title="확대"><span class="icon">🔍+</span></button>
-        <button class="preset-btn" title="축소"><span class="icon">🔍-</span></button>
-        <button class="preset-btn" title="초기화"><span class="icon">↺</span></button>
+      <div class="trace-controls">
+        <div class="control-row">
+          <label>밝기</label>
+          <input type="range" id="trace-brightness" min="0" max="200" value="100">
+        </div>
+        <div class="control-row">
+          <label>대비</label>
+          <input type="range" id="trace-contrast" min="0" max="200" value="100">
+        </div>
+        <div class="control-row">
+          <label>투명도</label>
+          <input type="range" id="trace-opacity" min="0" max="100" value="50">
+        </div>
       </div>
     </div>
-    <div id="object-list" style="display:none;"></div>
+    
+    <div class="panel-section" style="border-top: 1px solid var(--border);">
+      <div class="panel-title">자수 패턴 라이브러리</div>
+      <div class="pattern-grid">
+        <button class="pattern-btn" data-preset="floral">🌸 Floral</button>
+        <button class="pattern-btn" data-preset="bohemian">🌿 Bohemian</button>
+        <button class="pattern-btn" data-preset="geometry">📐 Geometry</button>
+        <button class="pattern-btn" data-preset="sashiko">🧵 Sashiko</button>
+        <button class="pattern-btn" data-preset="smocking">🐝 Smocking</button>
+      </div>
+    </div>
   </aside>
 
   <!-- 캔버스 영역 -->
   <main id="canvas-wrap">
     <canvas id="c"></canvas>
-    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:220px; height:160px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:40; display: flex; align-items: center; justify-content: center;">
-      <div style="color:var(--text-muted); font-size:12px;">캡처 미리보기</div>
+    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:240px; height:180px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:40; display: none; flex-direction: column;">
+      <div style="padding: 6px 10px; background: #f8f9fa; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 11px; font-weight: 600;">캡처 미리보기</span>
+        <button id="btn-clear-preview" style="background: none; border: none; cursor: pointer; color: var(--danger); font-size: 14px;">✕</button>
+      </div>
+      <div id="preview-img-wrap" style="flex: 1; position: relative; background: #000; overflow: hidden;"></div>
     </div>
     <div id="hud"></div>
     <div id="pos">0, 0</div>
@@ -102,18 +124,27 @@
     </div>
     
     <div class="prop-group">
-      <div class="panel-title">스티치 설정</div>
-      <div class="prop-label">밀도 (mm)</div>
+      <div class="panel-title">스티치 기법</div>
+      <div class="stitch-tech-grid">
+        <button class="stitch-tech-btn active" data-stitch="running">러닝 (Running)</button>
+        <button class="stitch-tech-btn" data-stitch="satin">새틴 (Satin)</button>
+        <button class="stitch-tech-btn" data-stitch="fill">채우기 (Fill)</button>
+        <button class="stitch-tech-btn" data-stitch="chain">체인 (Chain)</button>
+        <button class="stitch-tech-btn" data-stitch="knot">매듭 (Knot)</button>
+      </div>
+    </div>
+
+    <div class="prop-group">
+      <div class="panel-title">상세 설정</div>
+      <div class="prop-label">밀도 (Density) <span id="val-density">2.0</span>mm</div>
       <div class="slider-row">
         <input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2">
-        <span class="slider-val" id="val-density">2.0</span>
       </div>
-      <div class="prop-label">각도 (°)</div>
+      <div class="prop-label">각도 (Angle) <span id="val-angle">0°</span></div>
       <div class="slider-row">
         <input type="range" id="sl-angle" min="0" max="180" step="15" value="0">
-        <span class="slider-val" id="val-angle">0°</span>
       </div>
-      <div class="prop-label">색상</div>
+      <div class="prop-label">색상 (Color)</div>
       <div class="color-row">
         <input type="color" id="inp-color" value="#4361ee">
         <span class="slider-val" id="val-color">#4361ee</span>
@@ -122,22 +153,6 @@
 
     <div class="bottom-actions" style="margin-top: auto; padding-top: 20px;">
       <button class="btn-filled" id="btn-export" style="width: 100%;">💾 DST 저장</button>
-    </div>
-
-    <!-- 숨겨진 원본 컨트롤 (JS 호환성 유지) -->
-    <div id="prop-controls" style="display:none;">
-      <input type="range" id="sl-maxlen" min="10" max="70" step="5" value="30">
-      <span id="val-maxlen">30</span>
-      <div id="stat-stitches">0</div>
-      <div id="stat-time">~0분</div>
-      <button class="stitch-btn" data-stitch="running"></button>
-      <button class="stitch-btn" data-stitch="satin"></button>
-      <button class="stitch-btn" data-stitch="fill"></button>
-      <button id="btn-flip-h"></button>
-      <button id="btn-flip-v"></button>
-      <button id="btn-rotate-ccw"></button>
-      <button id="btn-rotate-cw"></button>
-      <button id="btn-mirror-copy"></button>
     </div>
   </aside>
 
