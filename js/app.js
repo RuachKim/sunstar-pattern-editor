@@ -322,48 +322,200 @@ document.getElementById('trace-contrast').addEventListener('input', e => { state
 document.getElementById('trace-opacity').addEventListener('input', e => { state.bgSettings.opacity = e.target.value; updateTraceFilter(); });
 document.getElementById('btn-clear-preview').addEventListener('click', () => document.getElementById('floating-preview').style.display = 'none');
 
-const btnCamera = document.getElementById('btn-camera'), cameraModal = document.getElementById('camera-modal'), cameraVideo = document.getElementById('camera-video'), cameraPreview = document.getElementById('camera-preview'), cameraControls = document.getElementById('camera-controls'), cameraPreviewControls = document.getElementById('camera-preview-controls'), btnCapture = document.getElementById('btn-capture'), btnCloseCamera = document.getElementById('btn-close-camera'), btnApplyPattern = document.getElementById('btn-apply-pattern'), btnRecapture = document.getElementById('btn-recapture');
+// ─── Camera Feature & Image Processing ───
+const btnCamera = document.getElementById('btn-camera');
+const cameraModal = document.getElementById('camera-modal');
+const cameraVideo = document.getElementById('camera-video');
+const cameraPreview = document.getElementById('camera-preview');
+const cameraControls = document.getElementById('camera-controls');
+const cameraPreviewControls = document.getElementById('camera-preview-controls');
+const btnCapture = document.getElementById('btn-capture');
+const btnCloseCamera = document.getElementById('btn-close-camera');
+const btnApplyPattern = document.getElementById('btn-apply-pattern');
+const btnRecapture = document.getElementById('btn-recapture');
 let cameraStream = null;
 
-function stopCamera() { if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; } cameraModal.style.display = 'none'; }
-btnCamera.addEventListener('click', async () => { cameraModal.style.display = 'flex'; try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); cameraVideo.srcObject = cameraStream; } catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; } });
+function stopCamera() {
+  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
+  cameraModal.style.display = 'none';
+}
+
+btnCamera.addEventListener('click', async () => {
+  cameraModal.style.display = 'flex';
+  try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); cameraVideo.srcObject = cameraStream; }
+  catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; }
+});
+
 btnCloseCamera.addEventListener('click', stopCamera);
+
+// RDP for path optimization
+function rdp(pts, e) {
+  if (pts.length <= 2) return pts;
+  let mx = 0, mi = 0;
+  const f = pts[0], l = pts[pts.length - 1];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const dx = l.x - f.x, dy = l.y - f.y, len = Math.hypot(dx, dy) || 1;
+    const d = Math.abs((pts[i].x - f.x) * dy - (pts[i].y - f.y) * dx) / len;
+    if (d > mx) { mx = d; mi = i; }
+  }
+  if (mx > e) {
+    const a = rdp(pts.slice(0, mi + 1), e);
+    const b = rdp(pts.slice(mi), e);
+    return a.slice(0, -1).concat(b);
+  }
+  return [f, l];
+}
 
 btnCapture.addEventListener('click', () => {
   if (!cameraVideo.videoWidth) return;
   const vW = cameraVideo.videoWidth, vH = cameraVideo.videoHeight;
-  const roiW = vW * 0.8, roiH = vH * 0.8, roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
+  const roiW = vW * 0.8, roiH = vH * 0.8;
+  const roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
+  
+  // Use a smaller dimension for processing to ensure performance
+  const maxDim = 300;
+  const scale = Math.min(maxDim / roiW, maxDim / roiH);
+  const pw = Math.floor(roiW * scale), ph = Math.floor(roiH * scale);
+  
+  const canvas = document.createElement('canvas');
+  canvas.width = pw; canvas.height = ph;
+  const tCtx = canvas.getContext('2d');
+  tCtx.drawImage(cameraVideo, roiX, roiY, roiW, roiH, 0, 0, pw, ph);
+
+  // Set up the preview canvas with the exact cropped image
   cameraPreview.width = roiW; cameraPreview.height = roiH;
   const pCtx = cameraPreview.getContext('2d');
   pCtx.drawImage(cameraVideo, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
-  pendingPatternObjects = [];
-  const pts = []; 
-  for(let i=0; i<360; i+=10) { 
-    const rad = i * Math.PI / 180;
-    const r = roiH * 0.3 + (roiH * 0.05) * Math.sin(rad * 6);
-    pts.push({x: r * Math.cos(rad), y: r * Math.sin(rad)}); 
+  
+  // -- Image Processing: Local Thresholding --
+  const imgData = tCtx.getImageData(0, 0, pw, ph);
+  const data = imgData.data;
+  const gray = new Uint8Array(pw * ph);
+  for (let i = 0; i < pw * ph; i++) {
+    gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
   }
-  pendingPatternObjects.push({ id: uid(), type: 'auto', points: pts, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '분석된 패턴' });
-  pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round'; pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4; pCtx.beginPath();
-  pts.forEach((p, i) => { const sx = p.x + roiW/2, sy = p.y + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
-  pCtx.closePath(); pCtx.stroke(); pCtx.restore();
+  
+  const S = Math.floor(pw / 16);
+  const intImg = new Uint32Array(pw * ph);
+  for(let y=0; y<ph; y++) {
+    let sumLine = 0;
+    for(let x=0; x<pw; x++) {
+      const lum = gray[y*pw + x];
+      sumLine += lum;
+      intImg[y*pw + x] = (y > 0 ? intImg[(y-1)*pw + x] : 0) + sumLine;
+    }
+  }
+  
+  const getSum = (x1, y1, x2, y2) => {
+    x1 = Math.max(0, x1); y1 = Math.max(0, y1);
+    x2 = Math.min(pw-1, x2); y2 = Math.min(ph-1, y2);
+    const a = (y1>0 && x1>0) ? intImg[(y1-1)*pw + (x1-1)] : 0;
+    const b = (y1>0) ? intImg[(y1-1)*pw + x2] : 0;
+    const c = (x1>0) ? intImg[y2*pw + (x1-1)] : 0;
+    const d = intImg[y2*pw + x2];
+    return d - b - c + a;
+  };
+
+  const points = [];
+  const T = 0.85; // Threshold factor
+  for (let y = 0; y < ph; y += 2) {
+    for (let x = 0; x < pw; x += 2) {
+      const area = (Math.min(pw-1, x+S) - Math.max(0, x-S) + 1) * (Math.min(ph-1, y+S) - Math.max(0, y-S) + 1);
+      const localAvg = getSum(x-S, y-S, x+S, y+S) / area;
+      if (gray[y*pw + x] < localAvg * T) {
+         // Transform back to actual world/ROI coordinates centered at 0,0
+         points.push({
+           x: (x / scale) - roiW/2,
+           y: (y / scale) - roiH/2,
+           visited: false
+         });
+      }
+    }
+  }
+  
+  pendingPatternObjects = [];
+  if (points.length > 2) {
+    const path = [points[0]];
+    points[0].visited = true;
+    let curr = points[0];
+    
+    // Nearest-Neighbor TSP approximation
+    for (let i = 1; i < points.length; i++) {
+      let minDist = Infinity;
+      let bestIdx = -1;
+      for (let j = 0; j < points.length; j++) {
+        if (!points[j].visited) {
+          const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y);
+          if (d < minDist) { minDist = d; bestIdx = j; }
+        }
+      }
+      if (bestIdx !== -1) {
+        points[bestIdx].visited = true;
+        curr = points[bestIdx];
+        path.push(curr);
+      }
+    }
+    
+    // Optimize path
+    const optimized = rdp(path, 6.0);
+    
+    pendingPatternObjects.push({ 
+      id: uid(), type: 'curve', points: optimized, 
+      stitch: state.currentStitchTech, density: 2, angle: 0, 
+      color: document.getElementById('inp-color').value, 
+      name: '카메라 추출 패턴' 
+    });
+
+    // Draw overlap on preview canvas
+    pCtx.save();
+    pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
+    pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4;
+    pCtx.beginPath();
+    optimized.forEach((p, i) => { 
+      const sx = p.x + roiW/2, sy = p.y + roiH/2; // Translate from centered back to top-left for drawing on canvas
+      if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); 
+    });
+    pCtx.stroke();
+    pCtx.restore();
+  } else {
+    showToast('패턴을 인식할 수 없습니다. 밝은 곳에서 대비가 명확하게 촬영해주세요.', 'error');
+  }
+
   cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block';
   cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex';
 });
 
-btnRecapture.addEventListener('click', () => { cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; });
+btnRecapture.addEventListener('click', () => {
+  cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none';
+  cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none';
+});
+
 btnApplyPattern.addEventListener('click', () => {
   if (pendingPatternObjects.length > 0) {
     saveUndo();
-    const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))}));
+    // Offset to match camera position in world space
+    const shifted = pendingPatternObjects.map(o => ({
+      ...o, 
+      points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))
+    }));
     state.objects.push(...shifted);
+    
     const dataURL = cameraPreview.toDataURL();
-    const floatingPreview = document.getElementById('floating-preview'), imgWrap = document.getElementById('preview-img-wrap');
-    floatingPreview.style.display = 'flex'; imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
-    updateTraceFilter(); render(); updateUI(); showToast('패턴이 적용되었습니다.');
+    const floatingPreview = document.getElementById('floating-preview');
+    const imgWrap = document.getElementById('preview-img-wrap');
+    floatingPreview.style.display = 'flex';
+    imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
+    
+    updateTraceFilter();
+    render(); 
+    updateUI();
+    showToast('패턴이 캔버스에 적용되었습니다.');
   }
   stopCamera();
 });
 
-document.getElementById('btn-go-origin').addEventListener('click', () => { state.cam.x = 0; state.cam.y = 0; state.cam.z = 1; render(); updateUI(); showToast('원점으로 이동했습니다.'); });
-updateUI(); render();
+document.getElementById('btn-go-origin').addEventListener('click', () => {
+  state.cam.x = 0; state.cam.y = 0; state.cam.z = 1;
+  render(); updateUI();
+  showToast('원점으로 이동했습니다.');
+});
