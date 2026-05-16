@@ -321,6 +321,8 @@ document.querySelectorAll('.pattern-btn').forEach(b => b.addEventListener('click
   else if (p === 'geometry') pts = PatternPresets.geometry();
   else if (p === 'sashiko') pts = PatternPresets.sashiko();
   else if (p === 'smocking') pts = PatternPresets.smocking();
+  else if (p === 'paisley') pts = PatternPresets.paisley();
+  else if (p === 'scroll') pts = PatternPresets.scroll();
   state.objects.push({ id: uid(), type: 'preset', points: PatternPresets.shiftPoints(pts, state.cam.x, state.cam.y), stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: b.textContent });
   render(); updateUI();
 }));
@@ -411,19 +413,25 @@ document.getElementById('btn-close-camera').addEventListener('click', () => {
 
 document.getElementById('btn-capture').addEventListener('click', () => {
   const w = cameraVideo.videoWidth, h = cameraVideo.videoHeight;
-  cameraPreview.width = w; cameraPreview.height = h;
+  // Guideline area (ROI): center 80%
+  const roiW = w * 0.8, roiH = h * 0.8;
+  const roiX = (w - roiW) / 2, roiY = (h - roiH) / 2;
+
+  cameraPreview.width = roiW; cameraPreview.height = roiH;
   const pCtx = cameraPreview.getContext('2d');
-  pCtx.drawImage(cameraVideo, 0, 0, w, h);
   
-  // Real Pattern Detection Mockup (Overlapping detected stitches)
+  // Crop to ROI
+  pCtx.drawImage(cameraVideo, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
+  
+  // Pattern Detection Mockup within ROI
   pendingPatternObjects = [];
-  const cx = w/2, cy = h/2;
-  const pts = []; for(let i=0; i<360; i+=10) { const r = 100 + 20*Math.sin(i*0.1); pts.push({x: (cx + r*Math.cos(i*Math.PI/180)-w/2)/2, y: (cy + r*Math.sin(i*Math.PI/180)-h/2)/2}); }
+  const cx = roiW/2, cy = roiH/2;
+  const pts = []; for(let i=0; i<360; i+=10) { const r = roiW*0.2; pts.push({x: (cx + r*Math.cos(i*Math.PI/180)-roiW/2)/2, y: (cy + r*Math.sin(i*Math.PI/180)-roiH/2)/2}); }
   pendingPatternObjects.push({ id: uid(), type: 'auto', points: pts, stitch: 'running', density: 2, angle: 0, color: '#2ecc71', name: '자동 추출 패턴' });
 
   // Draw overlap on preview canvas
   pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.beginPath();
-  pts.forEach((p, i) => { const sx = p.x*2 + w/2, sy = p.y*2 + h/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
+  pts.forEach((p, i) => { const sx = p.x*2 + roiW/2, sy = p.y*2 + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
   pCtx.closePath(); pCtx.stroke();
 
   cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block';
@@ -438,7 +446,9 @@ document.getElementById('btn-recapture').addEventListener('click', () => {
 document.getElementById('btn-apply-pattern').addEventListener('click', () => {
   if (pendingPatternObjects.length > 0) {
     saveUndo();
-    state.objects.push(...pendingPatternObjects);
+    // Move to current camera position
+    const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))}));
+    state.objects.push(...shifted);
     const dataURL = cameraPreview.toDataURL();
     const floatingPreview = document.getElementById('floating-preview');
     const imgWrap = document.getElementById('preview-img-wrap');

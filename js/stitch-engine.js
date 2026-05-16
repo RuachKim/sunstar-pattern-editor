@@ -224,4 +224,24 @@ export class PatternPresets {
     const minX = Math.min(...pts.map(p => p.x)), minY = Math.min(...pts.map(p => p.y));
     return pts.map(p => ({ x: p.x - minX + left, y: p.y - minY + top }));
   }
+
+  static paisley(cx = 0, cy = 0) {
+    const pts = [];
+    for (let t = 0; t <= Math.PI * 2; t += 0.1) {
+      const r = 60 * Math.pow(Math.sin(t), 2) * (1 + 0.5 * Math.cos(t));
+      const x = cx + r * Math.cos(t + Math.PI/4);
+      const y = cy + r * Math.sin(t + Math.PI/4);
+      pts.push({ x, y });
+    }
+    return pts;
+  }
+
+  static scroll(cx = 0, cy = 0) {
+    const pts = [];
+    for (let t = 0; t <= 10; t += 0.2) {
+      const r = 5 * t;
+      pts.push({ x: cx + r * Math.cos(t), y: cy + r * Math.sin(t) });
+    }
+    return pts;
+  }
 }
