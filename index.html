@@ -108,10 +108,10 @@
   <!-- 캔버스 영역 -->
   <main id="canvas-wrap">
     <canvas id="c"></canvas>
-    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:240px; height:180px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:40; display: none; flex-direction: column;">
-      <div style="padding: 6px 10px; background: #f8f9fa; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
-        <span style="font-size: 11px; font-weight: 600;">캡처 미리보기</span>
-        <button id="btn-clear-preview" style="background: none; border: none; cursor: pointer; color: var(--danger); font-size: 14px;">✕</button>
+    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:320px; height:240px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.15); z-index:40; display: none; flex-direction: column;">
+      <div style="padding: 8px 12px; background: #f8f9fa; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
+        <span style="font-size: 12px; font-weight: 600;">캡처 미리보기</span>
+        <button id="btn-clear-preview" style="background: none; border: none; cursor: pointer; color: var(--danger); font-size: 16px;">✕</button>
       </div>
       <div id="preview-img-wrap" style="flex: 1; position: relative; background: #000; overflow: hidden;"></div>
     </div>
@@ -175,6 +175,11 @@
 
   <!-- 토스트 알림 -->
   <div id="toast-container" style="position:fixed; top:24px; right:24px; z-index:10000; display:flex; flex-direction:column; gap:12px; pointer-events:none;"></div>
+</div>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>container" style="position:fixed; top:24px; right:24px; z-index:10000; display:flex; flex-direction:column; gap:12px; pointer-events:none;"></div>
 </div>
 
 <script type="module" src="js/app.js"></script>

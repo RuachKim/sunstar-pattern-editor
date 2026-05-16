@@ -225,16 +225,16 @@ cv.addEventListener('pointerdown', e => {
     const oi = hitObj(mx, my); if (oi >= 0) { saveUndo(); state.objects.splice(oi, 1); state.selectedIdx = -1; render(); updateUI(); }
   } else if (state.tool === 'line') {
     if (!drawPts) drawPts = [{x:sw, y:sh}];
-    else { saveUndo(); state.objects.push({ id: uid(), type: 'line', points: [...drawPts, {x:sw, y:sh}], stitch: state.currentStitchTech, density: parseFloat(document.getElementById('sl-density').value), angle: parseInt(document.getElementById('sl-angle').value), color: document.getElementById('inp-color').value, name: '직선 스티치' }); drawPts = null; updateUI(); }
+    else { saveUndo(); state.objects.push({ id: uid(), type: 'line', points: [...drawPts, {x:sw, y:sh}], stitch: state.currentStitchTech, density: parseFloat(document.getElementById('sl-density').value), angle: parseInt(document.getElementById('sl-angle').value), scale: 1.0, color: document.getElementById('inp-color').value, name: '직선 스티치' }); drawPts = null; updateUI(); }
   } else if (state.tool === 'arch') {
     if (!drawPts) drawPts = [{x:sw, y:sh}];
     else if (drawPts.length === 1) drawPts.push({x:sw, y:sh});
-    else { saveUndo(); state.objects.push({ id: uid(), type: 'arch', points: getArch(drawPts[0], drawPts[1], {x:sw, y:sh}), controlPoints: [drawPts[0], drawPts[1], {x:sw, y:sh}], stitch: state.currentStitchTech, density: parseFloat(document.getElementById('sl-density').value), angle: parseInt(document.getElementById('sl-angle').value), color: document.getElementById('inp-color').value, name: '호 스티치' }); drawPts = null; updateUI(); }
+    else { saveUndo(); state.objects.push({ id: uid(), type: 'arch', points: getArch(drawPts[0], drawPts[1], {x:sw, y:sh}), controlPoints: [drawPts[0], drawPts[1], {x:sw, y:sh}], stitch: state.currentStitchTech, density: parseFloat(document.getElementById('sl-density').value), angle: parseInt(document.getElementById('sl-angle').value), scale: 1.0, color: document.getElementById('inp-color').value, name: '호 스티치' }); drawPts = null; updateUI(); }
   } else if (state.tool === 'curve') {
     if (!drawPts) drawPts = [{x:sw, y:sh}];
-    else { if (Math.hypot(sw - drawPts[0].x, sh - drawPts[0].y) < 15 && drawPts.length > 2) { drawPts.push({...drawPts[0]}); saveUndo(); state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '곡선 스티치' }); drawPts = null; updateUI(); } else drawPts.push({x:sw, y:sh}); }
+    else { if (Math.hypot(sw - drawPts[0].x, sh - drawPts[0].y) < 15 && drawPts.length > 2) { drawPts.push({...drawPts[0]}); saveUndo(); state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: state.currentStitchTech, density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: '곡선 스티치' }); drawPts = null; updateUI(); } else drawPts.push({x:sw, y:sh}); }
   } else if (state.tool === 'circle') drawStart = { cx: sw, cy: sh, ex: sw, ey: sh };
-  else if (state.tool === 'rect') { if (!drawPts) drawPts = [{x:sw, y:sh}]; else { saveUndo(); const p0 = drawPts[0]; const rpts = [{x:p0.x, y:p0.y}, {x:sw, y:p0.y}, {x:sw, y:sh}, {x:p0.x, y:sh}, {x:p0.x, y:p0.y}]; state.objects.push({ id: uid(), type: 'rect', points: rpts, stitch: 'fill', density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '사각형 채우기' }); drawPts = null; updateUI(); } }
+  else if (state.tool === 'rect') { if (!drawPts) drawPts = [{x:sw, y:sh}]; else { saveUndo(); const p0 = drawPts[0]; const rpts = [{x:p0.x, y:p0.y}, {x:sw, y:p0.y}, {x:sw, y:sh}, {x:p0.x, y:sh}, {x:p0.x, y:p0.y}]; state.objects.push({ id: uid(), type: 'rect', points: rpts, stitch: 'fill', density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: '사각형 채우기' }); drawPts = null; updateUI(); } }
 });
 
 cv.addEventListener('pointermove', e => {
@@ -249,18 +249,16 @@ cv.addEventListener('pointermove', e => {
       if (drag.origCtrl) state.objects[state.selectedIdx].controlPoints.forEach((p, i) => { p.x = drag.origCtrl[i].x + dx; p.y = drag.origCtrl[i].y + dy; });
     } else {
       const o = state.objects[state.selectedIdx];
-      if (o.controlPoints) { 
-        o.controlPoints[drag.nodeIdx].x = tempPos.x; o.controlPoints[drag.nodeIdx].y = tempPos.y; 
-        if (o.type === 'arch') o.points = getArch(o.controlPoints[0], o.controlPoints[1], o.controlPoints[2]); 
-      } else { o.points[drag.nodeIdx].x = tempPos.x; o.points[drag.nodeIdx].y = tempPos.y; }
+      if (o.controlPoints) { o.controlPoints[drag.nodeIdx].x = tempPos.x; o.controlPoints[drag.nodeIdx].y = tempPos.y; if (o.type === 'arch') o.points = getArch(o.controlPoints[0], o.controlPoints[1], o.controlPoints[2]); }
+      else o.points[drag.nodeIdx].x = tempPos.x; o.points[drag.nodeIdx].y = tempPos.y;
     }
     render();
   } else if (drawStart) { drawStart.ex = tempPos.x; drawStart.ey = tempPos.y; render(); }
   else if (drawPts) render();
 });
 
-cv.addEventListener('pointerup', () => { panning = false; if (drag) drag = null; if (drawStart) { saveUndo(); const r = Math.hypot(drawStart.ex - drawStart.cx, drawStart.ey - drawStart.cy); if (r > 1) { const pts = []; for (let i = 0; i <= 48; i++) { const t = i/48 * Math.PI*2; pts.push({ x: drawStart.cx + r*Math.cos(t), y: drawStart.cy + r*Math.sin(t) }); } state.objects.push({ id: uid(), type: 'circle', points: pts, stitch: 'satin', density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '원형 새틴' }); updateUI(); } drawStart = null; render(); } });
-cv.addEventListener('dblclick', () => { if (state.tool === 'curve' && drawPts && drawPts.length > 2) { saveUndo(); state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '자유곡선 스티치' }); drawPts = null; render(); updateUI(); } });
+cv.addEventListener('pointerup', () => { panning = false; if (drag) drag = null; if (drawStart) { saveUndo(); const r = Math.hypot(drawStart.ex - drawStart.cx, drawStart.ey - drawStart.cy); if (r > 1) { const pts = []; for (let i = 0; i <= 48; i++) { const t = i/48 * Math.PI*2; pts.push({ x: drawStart.cx + r*Math.cos(t), y: drawStart.cy + r*Math.sin(t) }); } state.objects.push({ id: uid(), type: 'circle', points: pts, stitch: 'satin', density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: '원형 새틴' }); updateUI(); } drawStart = null; render(); } });
+cv.addEventListener('dblclick', () => { if (state.tool === 'curve' && drawPts && drawPts.length > 2) { saveUndo(); state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: state.currentStitchTech, density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: '자유곡선 스티치' }); drawPts = null; render(); updateUI(); } });
 cv.addEventListener('wheel', e => { e.preventDefault(); const w = s2w(e.offsetX, e.offsetY); state.cam.z = Math.max(0.15, Math.min(5, state.cam.z * (e.deltaY < 0 ? 1.15 : 0.85))); state.cam.x = w.x - (e.offsetX - cv.width/2)/state.cam.z; state.cam.y = w.y - (e.offsetY - cv.height/2)/state.cam.z; render(); }, { passive: false });
 
 function setTool(t) {
@@ -279,7 +277,7 @@ document.querySelectorAll('.pattern-btn').forEach(b => b.addEventListener('click
   else if (p === 'smocking') pts = PatternPresets.smocking();
   else if (p === 'paisley') pts = PatternPresets.paisley();
   else if (p === 'scroll') pts = PatternPresets.scroll();
-  state.objects.push({ id: uid(), type: 'preset', points: PatternPresets.shiftPoints(pts, state.cam.x, state.cam.y), stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: b.textContent });
+  state.objects.push({ id: uid(), type: 'preset', points: PatternPresets.shiftPoints(pts, state.cam.x, state.cam.y), stitch: state.currentStitchTech, density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: b.textContent });
   render(); updateUI();
 }));
 
@@ -299,6 +297,9 @@ function updateUI() {
   });
   const sel = state.objects[state.selectedIdx];
   if (sel) {
+    if (!sel.scale) sel.scale = 1.0;
+    document.getElementById('sl-scale').value = Math.round(sel.scale * 100);
+    document.getElementById('val-scale').textContent = Math.round(sel.scale * 100) + '%';
     document.getElementById('sl-density').value = sel.density; document.getElementById('val-density').textContent = sel.density.toFixed(1);
     document.getElementById('sl-angle').value = sel.angle; document.getElementById('val-angle').textContent = sel.angle + '°';
     document.getElementById('inp-color').value = sel.color; document.getElementById('val-color').textContent = sel.color;
@@ -309,6 +310,20 @@ function updateUI() {
   document.getElementById('status-objs').textContent = `오브젝트: ${state.objects.length} | 스티치: ${totalCount.toLocaleString()}`;
 }
 
+document.getElementById('sl-scale').addEventListener('input', e => {
+  const v = parseInt(e.target.value) / 100;
+  document.getElementById('val-scale').textContent = (v * 100).toFixed(0) + '%';
+  if (state.selectedIdx >= 0) {
+    const obj = state.objects[state.selectedIdx];
+    const oldScale = obj.scale || 1.0;
+    const ratio = v / oldScale;
+    const { x1, y1, x2, y2 } = bbox(obj.points);
+    const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
+    obj.points.forEach(p => { p.x = cx + (p.x - cx) * ratio; p.y = cy + (p.y - cy) * ratio; });
+    if (obj.controlPoints) { obj.controlPoints.forEach(p => { p.x = cx + (p.x - cx) * ratio; p.y = cy + (p.y - cy) * ratio; }); }
+    obj.scale = v; render();
+  }
+});
 document.getElementById('sl-density').addEventListener('input', e => { const v = parseFloat(e.target.value); document.getElementById('val-density').textContent = v.toFixed(1); if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].density = v; render(); } });
 document.getElementById('sl-angle').addEventListener('input', e => { const v = parseInt(e.target.value); document.getElementById('val-angle').textContent = v + '°'; if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].angle = v; render(); } });
 document.getElementById('inp-color').addEventListener('input', e => { document.getElementById('val-color').textContent = e.target.value; if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].color = e.target.value; render(); updateUI(); } });
@@ -373,21 +388,26 @@ function processImage(imgSource, isVideo = false) {
     if (gray[y*pw + x] < (getSum(x-S, y-S, x+S, y+S) / area) * T) { points.push({ x: (x / scale) - roiW/2, y: (y / scale) - roiH/2, visited: false }); }
   } }
   pendingPatternObjects = [];
-  if (points.length > 10) {
-    const path = [points[0]]; points[0].visited = true; let curr = points[0];
-    for (let i = 1; i < points.length; i++) {
-      let minDist = Infinity, bestIdx = -1;
-      for (let j = 0; j < points.length; j++) { if (!points[j].visited) { const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y); if (d < minDist) { minDist = d; bestIdx = j; } } }
-      if (bestIdx !== -1) { points[bestIdx].visited = true; curr = points[bestIdx]; path.push(curr); }
+  if (points.length > 5) {
+    const clusters = []; let remaining = [...points];
+    while (remaining.length > 0) {
+      let cluster = [remaining.shift()]; let changed = true;
+      while (changed) { changed = false; for (let i = 0; i < remaining.length; i++) { const p = remaining[i]; const close = cluster.some(cp => Math.hypot(cp.x - p.x, cp.y - p.y) < 15); if (close) { cluster.push(remaining.splice(i, 1)[0]); i--; changed = true; } } }
+      if (cluster.length > 5) clusters.push(cluster);
     }
-    const optimized = rdp(path, 4.0);
-    if (optimized.length > 2) {
-      pendingPatternObjects.push({ id: uid(), type: 'auto', points: optimized, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '추출 패턴' });
-      pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 2; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
-      pCtx.beginPath();
-      optimized.forEach((p, i) => { const sx = p.x + roiW/2, sy = p.y + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
-      pCtx.stroke(); pCtx.restore();
-    }
+    clusters.forEach((cluster, idx) => {
+      const path = [cluster[0]]; cluster[0].visited = true; let curr = cluster[0];
+      for (let i = 1; i < cluster.length; i++) {
+        let minDist = Infinity, bestIdx = -1;
+        for (let j = 0; j < cluster.length; j++) { if (!cluster[j].visited) { const d = Math.hypot(cluster[j].x - curr.x, cluster[j].y - curr.y); if (d < minDist) { minDist = d; bestIdx = j; } } }
+        if (bestIdx !== -1) { cluster[bestIdx].visited = true; curr = cluster[bestIdx]; path.push(curr); }
+      }
+      const optimized = rdp(path, 4.0);
+      if (optimized.length > 2) { pendingPatternObjects.push({ id: uid(), type: 'auto', points: optimized, stitch: state.currentStitchTech, density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: `추출 패턴 ${idx + 1}` }); }
+    });
+    pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 1; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
+    pendingPatternObjects.forEach(obj => { pCtx.beginPath(); obj.points.forEach((p, i) => { const sx = p.x + roiW/2, sy = p.y + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); }); pCtx.stroke(); });
+    pCtx.restore();
   }
   return pendingPatternObjects.length > 0;
 }
@@ -395,9 +415,7 @@ function processImage(imgSource, isVideo = false) {
 btnCapture.addEventListener('click', () => { if (processImage(cameraVideo, true)) { cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; } else showToast('인식 실패.', 'error'); });
 btnRecapture.addEventListener('click', () => { cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; });
 btnApplyPattern.addEventListener('click', () => {
-  if (pendingPatternObjects.length > 0) { 
-    saveUndo(); 
-    state.objects.push(...pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})));
+  if (pendingPatternObjects.length > 0) { saveUndo(); state.objects.push(...pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})));
     const dataURL = cameraPreview.toDataURL(); document.getElementById('floating-preview').style.display = 'flex'; document.getElementById('preview-img-wrap').innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
     pendingPatternObjects = []; render(); updateUI(); showToast('패턴이 적용되었습니다.');
   }
