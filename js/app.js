@@ -322,33 +322,7 @@ document.getElementById('trace-contrast').addEventListener('input', e => { state
 document.getElementById('trace-opacity').addEventListener('input', e => { state.bgSettings.opacity = e.target.value; updateTraceFilter(); });
 document.getElementById('btn-clear-preview').addEventListener('click', () => document.getElementById('floating-preview').style.display = 'none');
 
-// ─── Camera Feature & Image Processing ───
-const btnCamera = document.getElementById('btn-camera');
-const cameraModal = document.getElementById('camera-modal');
-const cameraVideo = document.getElementById('camera-video');
-const cameraPreview = document.getElementById('camera-preview');
-const cameraControls = document.getElementById('camera-controls');
-const cameraPreviewControls = document.getElementById('camera-preview-controls');
-const btnCapture = document.getElementById('btn-capture');
-const btnCloseCamera = document.getElementById('btn-close-camera');
-const btnApplyPattern = document.getElementById('btn-apply-pattern');
-const btnRecapture = document.getElementById('btn-recapture');
-let cameraStream = null;
-
-function stopCamera() {
-  if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
-  cameraModal.style.display = 'none';
-}
-
-btnCamera.addEventListener('click', async () => {
-  cameraModal.style.display = 'flex';
-  try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); cameraVideo.srcObject = cameraStream; }
-  catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; }
-});
-
-btnCloseCamera.addEventListener('click', stopCamera);
-
-// RDP for path optimization
+// ─── RDP & Path Optimization ───
 function rdp(pts, e) {
   if (pts.length <= 2) return pts;
   let mx = 0, mi = 0;
@@ -366,144 +340,71 @@ function rdp(pts, e) {
   return [f, l];
 }
 
-btnCapture.addEventListener('click', () => {
-  if (!cameraVideo.videoWidth) return;
-  const vW = cameraVideo.videoWidth, vH = cameraVideo.videoHeight;
-  const roiW = vW * 0.8, roiH = vH * 0.8;
-  const roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
-  
-  // Use a smaller dimension for processing to ensure performance
-  const maxDim = 300;
-  const scale = Math.min(maxDim / roiW, maxDim / roiH);
+// ─── Camera & Image Processing ───
+const btnCamera = document.getElementById('btn-camera'), cameraModal = document.getElementById('camera-modal'), cameraVideo = document.getElementById('camera-video'), cameraPreview = document.getElementById('camera-preview'), cameraControls = document.getElementById('camera-controls'), cameraPreviewControls = document.getElementById('camera-preview-controls'), btnCapture = document.getElementById('btn-capture'), btnCloseCamera = document.getElementById('btn-close-camera'), btnApplyPattern = document.getElementById('btn-apply-pattern'), btnRecapture = document.getElementById('btn-recapture');
+let cameraStream = null;
+
+function stopCamera() { if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; } cameraModal.style.display = 'none'; }
+btnCamera.addEventListener('click', async () => { cameraModal.style.display = 'flex'; try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); cameraVideo.srcObject = cameraStream; } catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; } });
+btnCloseCamera.addEventListener('click', stopCamera);
+
+function processImage(imgSource, isVideo = false) {
+  const vW = isVideo ? imgSource.videoWidth : imgSource.width;
+  const vH = isVideo ? imgSource.videoHeight : imgSource.height;
+  if (!vW || !vH) return false;
+  const roiW = vW * 0.8, roiH = vH * 0.8, roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
+  const maxDim = 400; const scale = Math.min(maxDim / roiW, maxDim / roiH);
   const pw = Math.floor(roiW * scale), ph = Math.floor(roiH * scale);
-  
-  const canvas = document.createElement('canvas');
-  canvas.width = pw; canvas.height = ph;
-  const tCtx = canvas.getContext('2d');
-  tCtx.drawImage(cameraVideo, roiX, roiY, roiW, roiH, 0, 0, pw, ph);
-
-  // Set up the preview canvas with the exact cropped image
+  const canvas = document.createElement('canvas'); canvas.width = pw; canvas.height = ph;
+  const tCtx = canvas.getContext('2d'); tCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, pw, ph);
   cameraPreview.width = roiW; cameraPreview.height = roiH;
-  const pCtx = cameraPreview.getContext('2d');
-  pCtx.drawImage(cameraVideo, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
-  
-  // -- Image Processing: Local Thresholding --
-  const imgData = tCtx.getImageData(0, 0, pw, ph);
-  const data = imgData.data;
-  const gray = new Uint8Array(pw * ph);
-  for (let i = 0; i < pw * ph; i++) {
-    gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2];
-  }
-  
-  const S = Math.floor(pw / 16);
-  const intImg = new Uint32Array(pw * ph);
-  for(let y=0; y<ph; y++) {
-    let sumLine = 0;
-    for(let x=0; x<pw; x++) {
-      const lum = gray[y*pw + x];
-      sumLine += lum;
-      intImg[y*pw + x] = (y > 0 ? intImg[(y-1)*pw + x] : 0) + sumLine;
-    }
-  }
-  
-  const getSum = (x1, y1, x2, y2) => {
-    x1 = Math.max(0, x1); y1 = Math.max(0, y1);
-    x2 = Math.min(pw-1, x2); y2 = Math.min(ph-1, y2);
-    const a = (y1>0 && x1>0) ? intImg[(y1-1)*pw + (x1-1)] : 0;
-    const b = (y1>0) ? intImg[(y1-1)*pw + x2] : 0;
-    const c = (x1>0) ? intImg[y2*pw + (x1-1)] : 0;
-    const d = intImg[y2*pw + x2];
-    return d - b - c + a;
-  };
-
-  const points = [];
-  const T = 0.85; // Threshold factor
-  for (let y = 0; y < ph; y += 2) {
-    for (let x = 0; x < pw; x += 2) {
-      const area = (Math.min(pw-1, x+S) - Math.max(0, x-S) + 1) * (Math.min(ph-1, y+S) - Math.max(0, y-S) + 1);
-      const localAvg = getSum(x-S, y-S, x+S, y+S) / area;
-      if (gray[y*pw + x] < localAvg * T) {
-         // Transform back to actual world/ROI coordinates centered at 0,0
-         points.push({
-           x: (x / scale) - roiW/2,
-           y: (y / scale) - roiH/2,
-           visited: false
-         });
-      }
-    }
-  }
-  
+  const pCtx = cameraPreview.getContext('2d'); pCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
+  const imgData = tCtx.getImageData(0, 0, pw, ph), data = imgData.data, gray = new Uint8Array(pw * ph);
+  for (let i = 0; i < pw * ph; i++) { gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2]; }
+  const S = Math.floor(pw / 16), intImg = new Uint32Array(pw * ph);
+  for(let y=0; y<ph; y++) { let sumLine = 0; for(let x=0; x<pw; x++) { sumLine += gray[y*pw + x]; intImg[y*pw + x] = (y > 0 ? intImg[(y-1)*pw + x] : 0) + sumLine; } }
+  const getSum = (x1, y1, x2, y2) => { x1 = Math.max(0, x1); y1 = Math.max(0, y1); x2 = Math.min(pw-1, x2); y2 = Math.min(ph-1, y2); return intImg[y2*pw + x2] - (y1>0 ? intImg[(y1-1)*pw + x2] : 0) - (x1>0 ? intImg[y2*pw + (x1-1)] : 0) + (y1>0 && x1>0 ? intImg[(y1-1)*pw + (x1-1)] : 0); };
+  const points = [], T = 0.82;
+  for (let y = 2; y < ph - 2; y += 2) { for (let x = 2; x < pw - 2; x += 2) {
+    const area = (Math.min(pw-1, x+S) - Math.max(0, x-S) + 1) * (Math.min(ph-1, y+S) - Math.max(0, y-S) + 1);
+    if (gray[y*pw + x] < (getSum(x-S, y-S, x+S, y+S) / area) * T) { points.push({ x: (x / scale) - roiW/2, y: (y / scale) - roiH/2, visited: false }); }
+  } }
   pendingPatternObjects = [];
-  if (points.length > 5) {
-    const path = [points[0]];
-    points[0].visited = true;
-    let curr = points[0];
+  if (points.length > 10) {
+    const path = [points[0]]; points[0].visited = true; let curr = points[0];
     for (let i = 1; i < points.length; i++) {
       let minDist = Infinity, bestIdx = -1;
-      for (let j = 0; j < points.length; j++) {
-        if (!points[j].visited) {
-          const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y);
-          if (d < minDist) { minDist = d; bestIdx = j; }
-        }
-      }
+      for (let j = 0; j < points.length; j++) { if (!points[j].visited) { const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y); if (d < minDist) { minDist = d; bestIdx = j; } } }
       if (bestIdx !== -1) { points[bestIdx].visited = true; curr = points[bestIdx]; path.push(curr); }
     }
-    const optimized = rdp(path, 8.0); // Smoother lines
+    const optimized = rdp(path, 4.0);
     if (optimized.length > 2) {
-      pendingPatternObjects.push({ 
-        id: uid(), type: 'auto', points: optimized, 
-        stitch: state.currentStitchTech, density: 2, angle: 0, 
-        color: document.getElementById('inp-color').value, 
-        name: '카메라 추출 패턴' 
-      });
-      pCtx.save();
-      pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
-      pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4;
-      pCtx.beginPath();
-      optimized.forEach((p, i) => { 
-        const sx = p.x + roiW/2, sy = p.y + roiH/2;
-        if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); 
-      });
-      pCtx.stroke();
-      pCtx.restore();
+      pendingPatternObjects.push({ id: uid(), type: 'auto', points: optimized, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '추출 패턴' });
+      pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round'; pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4; pCtx.beginPath();
+      optimized.forEach((p, i) => { const sx = p.x + roiW/2, sy = p.y + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
+      pCtx.stroke(); pCtx.restore();
     }
   }
+  return pendingPatternObjects.length > 0;
+}
 
-  if (pendingPatternObjects.length === 0) {
-    showToast('패턴을 인식할 수 없습니다. 밝은 곳에서 촬영해주세요.', 'error');
-    cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none';
-    cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none';
-    return;
-  }
-
-  cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block';
-  cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex';
-});
-
-btnRecapture.addEventListener('click', () => {
-  pendingPatternObjects = [];
-  cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none';
-  cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none';
-});
-
+btnCapture.addEventListener('click', () => { if (processImage(cameraVideo, true)) { cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; } else showToast('패턴 인식 실패. 명확하게 촬영해주세요.', 'error'); });
+btnRecapture.addEventListener('click', () => { cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; });
 btnApplyPattern.addEventListener('click', () => {
-  if (pendingPatternObjects.length > 0) {
-    saveUndo();
-    const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))}));
-    state.objects.push(...shifted);
-    const dataURL = cameraPreview.toDataURL();
-    const floatingPreview = document.getElementById('floating-preview'), imgWrap = document.getElementById('preview-img-wrap');
-    floatingPreview.style.display = 'flex';
-    imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
-    pendingPatternObjects = []; // Prevent duplicates
-    updateTraceFilter(); render(); updateUI();
-    showToast('패턴이 적용되었습니다.');
+  if (pendingPatternObjects.length > 0) { saveUndo(); const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})); state.objects.push(...shifted);
+    const dataURL = cameraPreview.toDataURL(); const floatingPreview = document.getElementById('floating-preview'), imgWrap = document.getElementById('preview-img-wrap');
+    floatingPreview.style.display = 'flex'; imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
+    pendingPatternObjects = []; updateTraceFilter(); render(); updateUI(); showToast('패턴이 적용되었습니다.');
   }
   stopCamera();
 });
 
-document.getElementById('btn-go-origin').addEventListener('click', () => {
-  state.cam.x = 0; state.cam.y = 0; state.cam.z = 1;
-  render(); updateUI();
-  showToast('원점으로 이동했습니다.');
+const btnOpenFile = document.getElementById('btn-open-file'), inpFile = document.getElementById('inp-file');
+btnOpenFile.addEventListener('click', () => inpFile.click());
+inpFile.addEventListener('change', e => {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader(); reader.onload = (event) => { const img = new Image(); img.onload = () => { cameraModal.style.display = 'flex'; cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; if (!processImage(img, false)) showToast('분석 실패.', 'error'); }; img.src = event.target.result; }; reader.readAsDataURL(file);
 });
+
+document.getElementById('btn-go-origin').addEventListener('click', () => { state.cam.x = 0; state.cam.y = 0; state.cam.z = 1; render(); updateUI(); showToast('원점으로 이동했습니다.'); });
+updateUI(); render();

@@ -122,8 +122,12 @@
   <!-- 오른쪽 패널 -->
   <aside id="right-panel">
     <div class="prop-group">
-      <div class="panel-title">카메라에서 불러오기</div>
-      <button class="btn-large-accent" id="btn-camera">📷 사진 촬영</button>
+      <div class="panel-title">카메라 및 파일에서 불러오기</div>
+      <div style="display: flex; gap: 8px;">
+        <button class="btn-large-accent" id="btn-camera" style="flex: 1;">📷 사진 촬영</button>
+        <button class="btn-large-accent" id="btn-open-file" style="flex: 1; background: #636e72;">📁 파일 열기</button>
+      </div>
+      <input type="file" id="inp-file" accept="image/*" style="display: none;">
     </div>
     
     <div class="prop-group">
