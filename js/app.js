@@ -687,17 +687,26 @@ document.getElementById('sl-maxlen').addEventListener('input', e => {
 });
 
 // ─── Buttons ───
-document.getElementById('btn-undo').addEventListener('click', undo);
-document.getElementById('btn-eraser-top').addEventListener('click', () => {
-  setTool('eraser');
-});
-document.getElementById('btn-clear-all').addEventListener('click', () => {
-  if (state.objects.length === 0) return;
-  saveUndo();
-  state.objects = []; state.selectedIdx = -1;
-  drawPts = null; drawStart = null; tempPos = null; drag = null;
-  render(); updateUI();
-});
+if (document.getElementById('btn-undo')) {
+  document.getElementById('btn-undo').addEventListener('click', undo);
+}
+if (document.getElementById('btn-redo-top')) {
+  document.getElementById('btn-redo-top').addEventListener('click', redo);
+}
+if (document.getElementById('btn-eraser-top')) {
+  document.getElementById('btn-eraser-top').addEventListener('click', () => {
+    setTool('eraser');
+  });
+}
+if (document.getElementById('btn-clear-all')) {
+  document.getElementById('btn-clear-all').addEventListener('click', () => {
+    if (state.objects.length === 0) return;
+    saveUndo();
+    state.objects = []; state.selectedIdx = -1;
+    drawPts = null; drawStart = null; tempPos = null; drag = null;
+    render(); updateUI();
+  });
+}
 
 document.getElementById('btn-export').addEventListener('click', () => {
   if (state.objects.length === 0) return;

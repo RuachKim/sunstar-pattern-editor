@@ -15,83 +15,73 @@
 </head>
 <body>
 <div id="app">
+  <!-- Tool Sidebar (PC: Column 1) -->
+  <nav id="toolbar">
+    <button class="icon-btn" style="margin-bottom: 12px;">☰</button>
+    <button class="tool-btn active" data-tool="select"><span>🖱</span><span class="tooltip">선택 (V)</span></button>
+    <button class="tool-btn" data-tool="hand"><span>✋</span><span class="tooltip">이동 (H)</span></button>
+    <button class="tool-btn" data-tool="trace"><span>🔍</span><span class="tooltip">트레이스</span></button>
+    <button class="tool-btn" data-tool="stitch"><span>〰</span><span class="tooltip">스티치</span></button>
+    <button class="tool-btn" data-tool="node"><span>📍</span><span class="tooltip">노드편집 (N)</span></button>
+    <button class="tool-btn" data-tool="curve"><span>🖌</span><span class="tooltip">자유곡선 (F)</span></button>
+    <button class="tool-btn" data-tool="eraser"><span>🧹</span><span class="tooltip">지우기 (E)</span></button>
+    <div style="margin-top: auto;">
+      <button class="tool-btn" data-tool="stats"><span>📊</span><span class="tooltip">통계</span></button>
+      <button class="tool-btn" data-tool="help"><span>❓</span><span class="tooltip">도움말</span></button>
+    </div>
+  </nav>
+
   <!-- Top Bar -->
   <header id="topbar">
-    <div class="logo">SunStar <span>Pattern Editor</span></div>
     <div class="topbar-actions">
-      <button class="btn-sm" id="btn-camera" title="카메라 촬영">📷 카메라 촬영</button>
-      <button class="btn-sm" id="btn-undo" title="되돌리기 (Ctrl+Z)">↩ 되돌리기</button>
-      <button class="btn-sm" id="btn-eraser-top" title="지우개 (E)">🧹 지우개</button>
-      <button class="btn-sm btn-danger" id="btn-clear-all">🗑 전체삭제</button>
+      <button class="btn-top" id="btn-edit-top"><span style="font-size: 16px;">✎</span> Edit</button>
+      <button class="btn-top" id="btn-cancel-top"><span style="font-size: 16px;">🔒</span> Cancel</button>
+      <button class="icon-btn" id="btn-undo" title="Undo">↩</button>
+      <button class="icon-btn" id="btn-redo-top" title="Redo">↪</button>
     </div>
   </header>
 
-  <!-- Camera Modal -->
-  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(15, 15, 26, 0.9); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter: blur(12px);">
+  <!-- Camera Modal (Keep it hidden but functional) -->
+  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.8); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter: blur(12px);">
     <div style="position:relative; width: 90%; max-width: 640px; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 48px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);">
       <video id="camera-video" autoplay playsinline style="width:100%; display:block;"></video>
       <canvas id="camera-preview" style="position:absolute; top:0; left:0; width:100%; height:100%; display:none; object-fit:contain; background:rgba(0,0,0,0.8);"></canvas>
-      <!-- Guideline overlay -->
-      <div id="camera-guideline" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:85%; height:85%; border:2px dashed rgba(255,255,255,0.5); pointer-events:none; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0,0,0,0.4);">
-        <div style="position:absolute; top:0; left:50%; width:1px; height:100%; background:rgba(255,255,255,0.3);"></div>
-        <div style="position:absolute; top:50%; left:0; width:100%; height:1px; background:rgba(255,255,255,0.3);"></div>
-        <div style="position:absolute; top:-2px; left:-2px; width:20px; height:20px; border-top:3px solid #fff; border-left:3px solid #fff;"></div>
-        <div style="position:absolute; top:-2px; right:-2px; width:20px; height:20px; border-top:3px solid #fff; border-right:3px solid #fff;"></div>
-        <div style="position:absolute; bottom:-2px; left:-2px; width:20px; height:20px; border-bottom:3px solid #fff; border-left:3px solid #fff;"></div>
-        <div style="position:absolute; bottom:-2px; right:-2px; width:20px; height:20px; border-bottom:3px solid #fff; border-right:3px solid #fff;"></div>
-      </div>
-      <div id="camera-message" style="position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(231,76,60,0.95); color:white; padding:10px 20px; border-radius:30px; font-size:14px; display:none; white-space:nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.3); font-weight: 500; backdrop-filter: blur(4px);">패턴을 인식할 수 없습니다. 다시 촬영해주세요.</div>
+      <div id="camera-guideline" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:85%; height:85%; border:2px dashed rgba(255,255,255,0.5); pointer-events:none; border-radius: 12px;"></div>
+      <div id="camera-message" style="position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(231,76,60,0.95); color:white; padding:10px 20px; border-radius:30px; font-size:14px; display:none;">패턴을 인식할 수 없습니다.</div>
     </div>
     <div style="margin-top:30px; display:flex; gap:16px;" id="camera-controls">
-      <button id="btn-capture" class="btn-lg btn-primary" style="font-size:16px; padding:14px 28px;">📸 촬영하기</button>
-      <button id="btn-close-camera" class="btn-lg btn-secondary" style="font-size:16px; padding:14px 28px;">취소</button>
+      <button id="btn-capture" class="btn-top">📸 촬영하기</button>
+      <button id="btn-close-camera" class="btn-top">취소</button>
     </div>
     <div style="margin-top:30px; display:none; gap:16px;" id="camera-preview-controls">
-      <button id="btn-apply-pattern" class="btn-lg btn-primary" style="font-size:16px; padding:14px 28px;">✨ 이 패턴 적용</button>
-      <button id="btn-recapture" class="btn-lg btn-secondary" style="font-size:16px; padding:14px 28px;">🔄 다시 촬영</button>
+      <button id="btn-apply-pattern" class="btn-top">✨ 적용</button>
+      <button id="btn-recapture" class="btn-top">🔄 다시 촬영</button>
     </div>
   </div>
 
-  <!-- Tool Sidebar -->
-  <nav id="toolbar">
-    <button class="tool-btn active" data-tool="select"><span>🖱</span><span class="tooltip">선택 (V)</span></button>
-    <button class="tool-btn" data-tool="hand"><span>✋</span><span class="tooltip">이동 (H)</span></button>
-    <button class="tool-btn" data-tool="eraser"><span>🧹</span><span class="tooltip">지우기 (E)</span></button>
-    <div class="tool-divider"></div>
-    <button class="tool-btn" data-tool="node"><span>📍</span><span class="tooltip">노드편집 (N)</span></button>
-    <div class="tool-divider"></div>
-    <button class="tool-btn" data-tool="line"><span>📏</span><span class="tooltip">직선 (L)</span></button>
-    <button class="tool-btn" data-tool="arch"><span>🌙</span><span class="tooltip">호/곡선 (A)</span></button>
-    <button class="tool-btn" data-tool="circle"><span>⭕</span><span class="tooltip">원 (C)</span></button>
-    <button class="tool-btn" data-tool="rect"><span>⬜</span><span class="tooltip">사각형 (R)</span></button>
-    <button class="tool-btn" data-tool="pulse"><span>〰</span><span class="tooltip">펄스 (P)</span></button>
-    <button class="tool-btn" data-tool="curve"><span>🖌</span><span class="tooltip">자유곡선 (F)</span></button>
-  </nav>
-
-  <!-- Left Panel -->
+  <!-- Left Panel (Floating Trace Panel in PC) -->
   <aside id="left-panel">
     <div class="panel-section">
-      <div class="panel-title">📦 프리셋 패턴</div>
+      <div class="panel-title">TRACE</div>
       <div class="preset-grid">
-        <button class="preset-btn" data-preset="zigzag"><span class="icon">📈</span>지그재그</button>
-        <button class="preset-btn" data-preset="scallop"><span class="icon">🌊</span>스캘럽</button>
-        <button class="preset-btn" data-preset="clover"><span class="icon">🍀</span>클로버</button>
-        <button class="preset-btn" data-preset="diamond"><span class="icon">♦</span>다이아몬드</button>
-        <button class="preset-btn" data-preset="star"><span class="icon">⭐</span>별</button>
-        <button class="preset-btn" data-preset="heart"><span class="icon">❤️</span>하트</button>
-        <button class="preset-btn" data-preset="rect-fill"><span class="icon">▦</span>사각형채움</button>
-        <button class="preset-btn" data-preset="circle-satin"><span class="icon">◎</span>원(새틴)</button>
+        <button class="preset-btn" title="Brightness"><span class="icon">☀</span></button>
+        <button class="preset-btn" title="Contrast"><span class="icon">◑</span></button>
+        <button class="preset-btn" title="Add"><span class="icon">＋</span></button>
+        <button class="preset-btn" title="Zoom In"><span class="icon">🔍+</span></button>
+        <button class="preset-btn" title="Zoom Out"><span class="icon">🔍-</span></button>
+        <button class="preset-btn" title="Reset"><span class="icon">↺</span></button>
       </div>
     </div>
-    <div class="panel-section" style="border-top:1px solid var(--border)">
-      <div class="panel-title">📋 오브젝트</div>
-    </div>
-    <div id="object-list"></div>
+    <div id="object-list" style="display:none;"></div>
   </aside>
 
   <!-- Canvas -->
   <main id="canvas-wrap">
     <canvas id="c"></canvas>
+    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:180px; height:135px; background:#eee; border-radius:8px; border:1px solid var(--border); overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1); z-index:40;">
+      <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:12px;">PREVIEW</div>
+      <button style="position:absolute; top:4px; right:4px; background:rgba(0,0,0,0.5); border:none; color:#fff; border-radius:4px; padding:2px 4px; cursor:pointer;">📊</button>
+    </div>
     <div id="hud"></div>
     <div id="pos">0, 0</div>
   </main>
@@ -99,63 +89,57 @@
   <!-- Right Panel -->
   <aside id="right-panel">
     <div class="prop-group">
-      <div class="panel-title">✨ 스티치 타입</div>
-      <div class="stitch-selector">
-        <button class="stitch-btn" data-stitch="running">── 러닝</button>
-        <button class="stitch-btn" data-stitch="satin">≋ 새틴</button>
-        <button class="stitch-btn" data-stitch="fill">▦ 채우기</button>
-      </div>
+      <div class="panel-title">IMPORT FROM CAMERA</div>
+      <button class="btn-large-accent" id="btn-camera">TAKE PHOTO</button>
     </div>
-    <div class="prop-group">
-      <div class="panel-title">🔄 변형 (Transform)</div>
-      <div class="stitch-selector" style="margin-bottom: 8px;">
-        <button class="stitch-btn" id="btn-flip-h">↔ 좌우 반전</button>
-        <button class="stitch-btn" id="btn-flip-v">↕ 상하 반전</button>
-      </div>
-      <div class="stitch-selector">
-        <button class="stitch-btn" id="btn-rotate-ccw">↺ -90°</button>
-        <button class="stitch-btn" id="btn-rotate-cw">↻ +90°</button>
-        <button class="stitch-btn" id="btn-mirror-copy" title="대칭 복사">◨ 대칭 복사</button>
-      </div>
-    </div>
-    <div class="prop-group">
-      <div class="prop-label">밀도 (mm)</div>
-      <div class="slider-row">
-        <input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2">
-        <span class="slider-val" id="val-density">2.0</span>
-      </div>
-    </div>
-    <div class="prop-group">
-      <div class="prop-label">각도 (°)</div>
-      <div class="slider-row">
-        <input type="range" id="sl-angle" min="0" max="180" step="15" value="0">
-        <span class="slider-val" id="val-angle">0°</span>
-      </div>
-    </div>
-    <div class="prop-group">
-      <div class="prop-label">색상</div>
-      <div class="color-row">
-        <input type="color" id="inp-color" value="#4361ee">
-        <span class="slider-val" id="val-color">#4361ee</span>
-      </div>
-    </div>
-    <div class="prop-group">
-      <div class="prop-label">최대 스티치 길이 (mm × 0.1)</div>
-      <div class="slider-row">
-        <input type="range" id="sl-maxlen" min="10" max="70" step="5" value="30">
-        <span class="slider-val" id="val-maxlen">30</span>
-      </div>
+    
+    <div class="bottom-actions">
+      <button class="btn-outline" id="btn-edit-bottom"><span>✎</span> Edit</button>
+      <button class="btn-filled" id="btn-export"><span>💾</span> Save VDT</button>
     </div>
 
-    <div class="prop-group export-section">
-      <div class="panel-title">💾 내보내기</div>
-      <div class="export-stats">
-        <div class="stat-box"><div class="val" id="stat-stitches">0</div><div class="lbl">스티치</div></div>
-        <div class="stat-box"><div class="val" id="stat-time">~0분</div><div class="lbl">예상시간</div></div>
-      </div>
-      <button class="export-btn" id="btn-export" disabled>💾 DST 다운로드</button>
+    <!-- Original property groups hidden for PC mode but available for JS -->
+    <div id="prop-controls" style="display:none;">
+      <input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2">
+      <span id="val-density">2.0</span>
+      <input type="range" id="sl-angle" min="0" max="180" step="15" value="0">
+      <span id="val-angle">0°</span>
+      <input type="color" id="inp-color" value="#4361ee">
+      <span id="val-color">#4361ee</span>
+      <input type="range" id="sl-maxlen" min="10" max="70" step="5" value="30">
+      <span id="val-maxlen">30</span>
+      <div id="stat-stitches">0</div>
+      <div id="stat-time">~0분</div>
+      <button class="stitch-btn" data-stitch="running"></button>
+      <button class="stitch-btn" data-stitch="satin"></button>
+      <button class="stitch-btn" data-stitch="fill"></button>
+      <button id="btn-flip-h"></button>
+      <button id="btn-flip-v"></button>
+      <button id="btn-rotate-ccw"></button>
+      <button id="btn-rotate-cw"></button>
+      <button id="btn-mirror-copy"></button>
     </div>
   </aside>
+
+  <!-- Status Bar -->
+  <footer id="statusbar">
+    <span id="status-tool">도구: 선택</span>
+    <span id="status-objs">오브젝트: 0</span>
+    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" class="snap-toggle">
+      <input type="checkbox" id="chk-snap" checked> <span class="snap-label">스냅 (1mm)</span>
+    </label>
+    <span style="margin-left:auto; opacity: 0.7;">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
+  </footer>
+
+  <!-- Status Bar -->
+  <footer id="statusbar">
+    <span id="status-tool">도구: 선택</span>
+    <span id="status-objs">오브젝트: 0</span>
+    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" class="snap-toggle">
+      <input type="checkbox" id="chk-snap" checked> <span class="snap-label">스냅 (1mm)</span>
+    </label>
+    <span style="margin-left:auto; opacity: 0.7;">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
+  </footer>
 
   <!-- Status Bar -->
   <footer id="statusbar">
