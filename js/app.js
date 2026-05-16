@@ -368,14 +368,17 @@ cv.addEventListener('pointerdown', e => {
   } else if (state.tool === 'eraser') {
     const oi = hitObj(mx, my);
     if (oi >= 0) { saveUndo(); state.objects.splice(oi, 1); if (state.selectedIdx >= state.objects.length) state.selectedIdx = -1; render(); updateUI(); }
-  } else if (['line', 'rect', 'pulse'].includes(state.tool)) {
+  } else if (['line', 'rect', 'pulse', 'stitch', 'trace'].includes(state.tool)) {
     if (!drawPts) drawPts = [{x:sw, y:sh}];
     else if (drawPts.length === 1) {
       drawPts.push({x:sw, y:sh});
       saveUndo();
       let finalPts = [];
       let name = '';
-      if (state.tool === 'line') { finalPts = drawPts; name = '직선'; }
+      if (state.tool === 'line' || state.tool === 'stitch' || state.tool === 'trace') { 
+        finalPts = drawPts; 
+        name = state.tool === 'stitch' ? '스티치' : (state.tool === 'trace' ? '트레이스' : '직선'); 
+      }
       else if (state.tool === 'rect') { 
          finalPts = [{x:drawPts[0].x, y:drawPts[0].y}, {x:drawPts[1].x, y:drawPts[0].y}, {x:drawPts[1].x, y:drawPts[1].y}, {x:drawPts[0].x, y:drawPts[1].y}, {x:drawPts[0].x, y:drawPts[0].y}]; 
          name = '사각형'; 
@@ -982,8 +985,8 @@ btnCapture.addEventListener('click', () => {
         if (d > maxLineErr) { maxLineErr = d; maxLineIdx = i; }
       }
       
-      const isLineLike = (pathLen <= len * 1.20) || (maxLineErr <= e * 3.0);
-      if (isLineLike && maxLineErr <= e * 4.0) { 
+      const isLineLike = (pathLen <= len * 1.15) || (maxLineErr <= e * 2.5);
+      if (isLineLike && maxLineErr <= e * 3.0) { 
         return [{ type: 'line', p0: f, p1: l }];
       }
       
@@ -1000,13 +1003,11 @@ btnCapture.addEventListener('click', () => {
         if (minDist > maxArchErr) { maxArchErr = minDist; maxArchIdx = i; }
       }
       
-      if (maxArchErr <= e) {
+      if (maxArchErr <= e * 1.5) {
         return [{ type: 'arch', p0: f, p1: l, p2: cp }];
       }
       
-      const splitIdx = maxLineErr < maxArchErr ? maxLineIdx : maxArchIdx;
-      if (splitIdx === 0 || splitIdx === pts.length - 1) return [{ type: 'line', p0: f, p1: l }];
-      
+      const splitIdx = Math.floor(pts.length / 2);
       return fitPrimitives(pts.slice(0, splitIdx + 1), e).concat(fitPrimitives(pts.slice(splitIdx), e));
     };
 
@@ -1058,7 +1059,24 @@ btnCapture.addEventListener('click', () => {
     prevCtx.fillStyle = 'rgba(0,0,0,0.2)';
     prevCtx.fillRect(0,0,w,h);
     
-    // Draw detected lines
+    // Also update the floating preview box on the main canvas
+    const floatingPreview = document.getElementById('floating-preview');
+    if (floatingPreview) {
+      floatingPreview.innerHTML = ''; // Clear "PREVIEW" text
+      const capturedImg = new Image();
+      capturedImg.src = canvas.toDataURL();
+      capturedImg.style.width = '100%';
+      capturedImg.style.height = '100%';
+      capturedImg.style.objectFit = 'cover';
+      floatingPreview.appendChild(capturedImg);
+      // Re-add the info button
+      const infoBtn = document.createElement('button');
+      infoBtn.style.cssText = "position:absolute; top:4px; right:4px; background:rgba(0,0,0,0.5); border:none; color:#fff; border-radius:4px; padding:2px 4px; cursor:pointer;";
+      infoBtn.innerHTML = '📊';
+      floatingPreview.appendChild(infoBtn);
+    }
+    
+    // Draw detected lines on the modal preview canvas
     prevCtx.strokeStyle = '#2ecc71';
     prevCtx.lineWidth = 4;
     prevCtx.lineCap = 'round';
