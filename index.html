@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="선스타 KM-2080P 자수 패턴 에디터 — 브라우저에서 바로 사용하는 전문 자수 디지타이징 도구">
-  <meta name="theme-color" content="#0f0f1a">
+  <meta name="theme-color" content="#f8f9fa">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>선스타 패턴 에디터</title>
@@ -15,38 +15,47 @@
 </head>
 <body>
 <div id="app">
-  <!-- Tool Sidebar (PC: Column 1) -->
+  <!-- 도구 사이드바 -->
   <nav id="toolbar">
-    <button class="icon-btn" style="margin-bottom: 12px;">☰</button>
+    <div style="height: 12px;"></div>
     <button class="tool-btn active" data-tool="select"><span>🖱</span><span class="tooltip">선택 (V)</span></button>
     <button class="tool-btn" data-tool="hand"><span>✋</span><span class="tooltip">이동 (H)</span></button>
-    <button class="tool-btn" data-tool="trace"><span>🔍</span><span class="tooltip">트레이스</span></button>
-    <button class="tool-btn" data-tool="stitch"><span>〰</span><span class="tooltip">스티치</span></button>
+    
+    <div class="tool-divider"></div>
+    
+    <!-- 스티치 통합 도구 -->
+    <div class="stitch-tool-wrap">
+      <button class="tool-btn" id="stitch-master"><span>〰</span><span class="tooltip">스티치</span></button>
+      <div class="stitch-sub-menu">
+        <button class="tool-btn sub-btn" data-tool="line"><span>📏</span><span class="tooltip">직선 (L)</span></button>
+        <button class="tool-btn sub-btn" data-tool="arch"><span>🌙</span><span class="tooltip">호/곡선 (A)</span></button>
+      </div>
+    </div>
+
     <button class="tool-btn" data-tool="node"><span>📍</span><span class="tooltip">노드편집 (N)</span></button>
     <button class="tool-btn" data-tool="curve"><span>🖌</span><span class="tooltip">자유곡선 (F)</span></button>
     <button class="tool-btn" data-tool="eraser"><span>🧹</span><span class="tooltip">지우기 (E)</span></button>
+    
     <div style="margin-top: auto;">
-      <button class="tool-btn" data-tool="stats"><span>📊</span><span class="tooltip">통계</span></button>
-      <button class="tool-btn" data-tool="help"><span>❓</span><span class="tooltip">도움말</span></button>
+      <button class="tool-btn" id="btn-help-func"><span>❓</span><span class="tooltip">도움말</span></button>
     </div>
   </nav>
 
-  <!-- Top Bar -->
+  <!-- 상단 바 -->
   <header id="topbar">
     <div class="topbar-actions">
-      <button class="btn-top" id="btn-edit-top"><span style="font-size: 16px;">✎</span> Edit</button>
-      <button class="btn-top" id="btn-cancel-top"><span style="font-size: 16px;">🔒</span> Cancel</button>
-      <button class="icon-btn" id="btn-undo" title="Undo">↩</button>
-      <button class="icon-btn" id="btn-redo-top" title="Redo">↪</button>
+      <button class="icon-btn" id="btn-undo" title="되돌리기">↩</button>
+      <button class="icon-btn" id="btn-redo-top" title="다시실행">↪</button>
+      <button class="btn-top btn-danger-text" id="btn-clear-all" style="margin-left: 20px;">전체삭제</button>
     </div>
   </header>
 
-  <!-- Camera Modal (Keep it hidden but functional) -->
-  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.8); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter: blur(12px);">
-    <div style="position:relative; width: 90%; max-width: 640px; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 48px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1);">
+  <!-- 카메라 모달 -->
+  <div id="camera-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0, 0, 0, 0.9); z-index:9999; flex-direction:column; align-items:center; justify-content:center; backdrop-filter: blur(12px);">
+    <div style="position:relative; width: 90%; max-width: 800px; border-radius: 20px; overflow: hidden; box-shadow: 0 24px 48px rgba(0,0,0,0.5); border: 1px solid rgba(255,255,255,0.1); background: #000;">
       <video id="camera-video" autoplay playsinline style="width:100%; display:block;"></video>
-      <canvas id="camera-preview" style="position:absolute; top:0; left:0; width:100%; height:100%; display:none; object-fit:contain; background:rgba(0,0,0,0.8);"></canvas>
-      <div id="camera-guideline" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:85%; height:85%; border:2px dashed rgba(255,255,255,0.5); pointer-events:none; border-radius: 12px;"></div>
+      <canvas id="camera-preview" style="position:absolute; top:0; left:0; width:100%; height:100%; display:none; object-fit:contain; background:transparent;"></canvas>
+      <div id="camera-guideline" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); width:80%; height:80%; border:2px dashed rgba(255,255,255,0.5); pointer-events:none; border-radius: 12px;"></div>
       <div id="camera-message" style="position:absolute; top:20px; left:50%; transform:translateX(-50%); background:rgba(231,76,60,0.95); color:white; padding:10px 20px; border-radius:30px; font-size:14px; display:none;">패턴을 인식할 수 없습니다.</div>
     </div>
     <div style="margin-top:30px; display:flex; gap:16px;" id="camera-controls">
@@ -54,58 +63,69 @@
       <button id="btn-close-camera" class="btn-top">취소</button>
     </div>
     <div style="margin-top:30px; display:none; gap:16px;" id="camera-preview-controls">
-      <button id="btn-apply-pattern" class="btn-top">✨ 적용</button>
+      <button id="btn-apply-pattern" class="btn-top" style="background: var(--accent); color: #fff;">✨ 패턴 적용</button>
       <button id="btn-recapture" class="btn-top">🔄 다시 촬영</button>
     </div>
   </div>
 
-  <!-- Left Panel (Floating Trace Panel in PC) -->
+  <!-- 왼쪽 패널 (트레이스 설정) -->
   <aside id="left-panel">
     <div class="panel-section">
-      <div class="panel-title">TRACE</div>
+      <div class="panel-title">트레이스 설정</div>
       <div class="preset-grid">
-        <button class="preset-btn" title="Brightness"><span class="icon">☀</span></button>
-        <button class="preset-btn" title="Contrast"><span class="icon">◑</span></button>
-        <button class="preset-btn" title="Add"><span class="icon">＋</span></button>
-        <button class="preset-btn" title="Zoom In"><span class="icon">🔍+</span></button>
-        <button class="preset-btn" title="Zoom Out"><span class="icon">🔍-</span></button>
-        <button class="preset-btn" title="Reset"><span class="icon">↺</span></button>
+        <button class="preset-btn" title="밝기"><span class="icon">☀</span></button>
+        <button class="preset-btn" title="대비"><span class="icon">◑</span></button>
+        <button class="preset-btn" title="추가"><span class="icon">＋</span></button>
+        <button class="preset-btn" title="확대"><span class="icon">🔍+</span></button>
+        <button class="preset-btn" title="축소"><span class="icon">🔍-</span></button>
+        <button class="preset-btn" title="초기화"><span class="icon">↺</span></button>
       </div>
     </div>
     <div id="object-list" style="display:none;"></div>
   </aside>
 
-  <!-- Canvas -->
+  <!-- 캔버스 영역 -->
   <main id="canvas-wrap">
     <canvas id="c"></canvas>
-    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:180px; height:135px; background:#eee; border-radius:8px; border:1px solid var(--border); overflow:hidden; box-shadow:0 4px 12px rgba(0,0,0,0.1); z-index:40;">
-      <div style="width:100%; height:100%; display:flex; align-items:center; justify-content:center; color:var(--text-muted); font-size:12px;">PREVIEW</div>
-      <button style="position:absolute; top:4px; right:4px; background:rgba(0,0,0,0.5); border:none; color:#fff; border-radius:4px; padding:2px 4px; cursor:pointer;">📊</button>
+    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:220px; height:160px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 24px rgba(0,0,0,0.12); z-index:40; display: flex; align-items: center; justify-content: center;">
+      <div style="color:var(--text-muted); font-size:12px;">캡처 미리보기</div>
     </div>
     <div id="hud"></div>
     <div id="pos">0, 0</div>
   </main>
 
-  <!-- Right Panel -->
+  <!-- 오른쪽 패널 -->
   <aside id="right-panel">
     <div class="prop-group">
-      <div class="panel-title">IMPORT FROM CAMERA</div>
-      <button class="btn-large-accent" id="btn-camera">TAKE PHOTO</button>
+      <div class="panel-title">카메라에서 불러오기</div>
+      <button class="btn-large-accent" id="btn-camera">📷 사진 촬영</button>
     </div>
     
-    <div class="bottom-actions">
-      <button class="btn-outline" id="btn-edit-bottom"><span>✎</span> Edit</button>
-      <button class="btn-filled" id="btn-export"><span>💾</span> Save VDT</button>
+    <div class="prop-group">
+      <div class="panel-title">스티치 설정</div>
+      <div class="prop-label">밀도 (mm)</div>
+      <div class="slider-row">
+        <input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2">
+        <span class="slider-val" id="val-density">2.0</span>
+      </div>
+      <div class="prop-label">각도 (°)</div>
+      <div class="slider-row">
+        <input type="range" id="sl-angle" min="0" max="180" step="15" value="0">
+        <span class="slider-val" id="val-angle">0°</span>
+      </div>
+      <div class="prop-label">색상</div>
+      <div class="color-row">
+        <input type="color" id="inp-color" value="#4361ee">
+        <span class="slider-val" id="val-color">#4361ee</span>
+      </div>
     </div>
 
-    <!-- Original property groups hidden for PC mode but available for JS -->
+    <div class="bottom-actions" style="margin-top: auto; padding-top: 20px;">
+      <button class="btn-filled" id="btn-export" style="width: 100%;">💾 DST 저장</button>
+    </div>
+
+    <!-- 숨겨진 원본 컨트롤 (JS 호환성 유지) -->
     <div id="prop-controls" style="display:none;">
-      <input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2">
-      <span id="val-density">2.0</span>
-      <input type="range" id="sl-angle" min="0" max="180" step="15" value="0">
-      <span id="val-angle">0°</span>
-      <input type="color" id="inp-color" value="#4361ee">
-      <span id="val-color">#4361ee</span>
       <input type="range" id="sl-maxlen" min="10" max="70" step="5" value="30">
       <span id="val-maxlen">30</span>
       <div id="stat-stitches">0</div>
@@ -121,7 +141,7 @@
     </div>
   </aside>
 
-  <!-- Status Bar -->
+  <!-- 상태 바 -->
   <footer id="statusbar">
     <span id="status-tool">도구: 선택</span>
     <span id="status-objs">오브젝트: 0</span>
@@ -131,31 +151,10 @@
     <span style="margin-left:auto; opacity: 0.7;">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
   </footer>
 
-  <!-- Status Bar -->
-  <footer id="statusbar">
-    <span id="status-tool">도구: 선택</span>
-    <span id="status-objs">오브젝트: 0</span>
-    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" class="snap-toggle">
-      <input type="checkbox" id="chk-snap" checked> <span class="snap-label">스냅 (1mm)</span>
-    </label>
-    <span style="margin-left:auto; opacity: 0.7;">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
-  </footer>
-
-  <!-- Status Bar -->
-  <footer id="statusbar">
-    <span id="status-tool">도구: 선택</span>
-    <span id="status-objs">오브젝트: 0</span>
-    <label style="display:flex; align-items:center; gap:6px; cursor:pointer;" class="snap-toggle">
-      <input type="checkbox" id="chk-snap" checked> <span class="snap-label">스냅 (1mm)</span>
-    </label>
-    <span style="margin-left:auto; opacity: 0.7;">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
-  </footer>
-
-  <!-- Toast Container -->
+  <!-- 토스트 알림 -->
   <div id="toast-container" style="position:fixed; top:24px; right:24px; z-index:10000; display:flex; flex-direction:column; gap:12px; pointer-events:none;"></div>
 </div>
 
 <script type="module" src="js/app.js"></script>
-<script>if('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');</script>
 </body>
 </html>

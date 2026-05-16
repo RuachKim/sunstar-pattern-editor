@@ -342,20 +342,49 @@ body {
   gap: 8px;
 }
 
-.btn-top:hover {
-  background: #f8f9fa;
+/* ─── Stitch Tool Wrap & Sub Menu ─── */
+.stitch-tool-wrap {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 }
 
-.icon-btn {
-  background: transparent;
-  border: none;
+.stitch-sub-menu {
+  position: absolute;
+  left: 56px;
+  top: 0;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  display: none;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1);
+  z-index: 200;
+}
+
+.stitch-tool-wrap:hover .stitch-sub-menu,
+.stitch-tool-wrap .tool-btn.active + .stitch-sub-menu {
+  display: flex;
+}
+
+.sub-btn {
+  width: 40px;
+  height: 40px;
   font-size: 18px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
 }
 
-.icon-btn:hover { color: var(--text-primary); }
+.btn-danger-text {
+  color: var(--danger) !important;
+  border-color: transparent !important;
+}
+
+.btn-danger-text:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-color: var(--danger) !important;
+}
 
 /* ─── Mobile Responsiveness (Keep Darkish/Original for now) ─── */
 @media (max-width: 800px) {
