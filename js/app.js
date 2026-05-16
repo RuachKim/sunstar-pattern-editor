@@ -434,51 +434,46 @@ btnCapture.addEventListener('click', () => {
   }
   
   pendingPatternObjects = [];
-  if (points.length > 2) {
+  if (points.length > 5) {
     const path = [points[0]];
     points[0].visited = true;
     let curr = points[0];
-    
-    // Nearest-Neighbor TSP approximation
     for (let i = 1; i < points.length; i++) {
-      let minDist = Infinity;
-      let bestIdx = -1;
+      let minDist = Infinity, bestIdx = -1;
       for (let j = 0; j < points.length; j++) {
         if (!points[j].visited) {
           const d = Math.hypot(points[j].x - curr.x, points[j].y - curr.y);
           if (d < minDist) { minDist = d; bestIdx = j; }
         }
       }
-      if (bestIdx !== -1) {
-        points[bestIdx].visited = true;
-        curr = points[bestIdx];
-        path.push(curr);
-      }
+      if (bestIdx !== -1) { points[bestIdx].visited = true; curr = points[bestIdx]; path.push(curr); }
     }
-    
-    // Optimize path
-    const optimized = rdp(path, 6.0);
-    
-    pendingPatternObjects.push({ 
-      id: uid(), type: 'curve', points: optimized, 
-      stitch: state.currentStitchTech, density: 2, angle: 0, 
-      color: document.getElementById('inp-color').value, 
-      name: '카메라 추출 패턴' 
-    });
+    const optimized = rdp(path, 8.0); // Smoother lines
+    if (optimized.length > 2) {
+      pendingPatternObjects.push({ 
+        id: uid(), type: 'auto', points: optimized, 
+        stitch: state.currentStitchTech, density: 2, angle: 0, 
+        color: document.getElementById('inp-color').value, 
+        name: '카메라 추출 패턴' 
+      });
+      pCtx.save();
+      pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
+      pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4;
+      pCtx.beginPath();
+      optimized.forEach((p, i) => { 
+        const sx = p.x + roiW/2, sy = p.y + roiH/2;
+        if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); 
+      });
+      pCtx.stroke();
+      pCtx.restore();
+    }
+  }
 
-    // Draw overlap on preview canvas
-    pCtx.save();
-    pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
-    pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4;
-    pCtx.beginPath();
-    optimized.forEach((p, i) => { 
-      const sx = p.x + roiW/2, sy = p.y + roiH/2; // Translate from centered back to top-left for drawing on canvas
-      if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); 
-    });
-    pCtx.stroke();
-    pCtx.restore();
-  } else {
-    showToast('패턴을 인식할 수 없습니다. 밝은 곳에서 대비가 명확하게 촬영해주세요.', 'error');
+  if (pendingPatternObjects.length === 0) {
+    showToast('패턴을 인식할 수 없습니다. 밝은 곳에서 촬영해주세요.', 'error');
+    cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none';
+    cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none';
+    return;
   }
 
   cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block';
@@ -486,6 +481,7 @@ btnCapture.addEventListener('click', () => {
 });
 
 btnRecapture.addEventListener('click', () => {
+  pendingPatternObjects = [];
   cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none';
   cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none';
 });
@@ -493,23 +489,15 @@ btnRecapture.addEventListener('click', () => {
 btnApplyPattern.addEventListener('click', () => {
   if (pendingPatternObjects.length > 0) {
     saveUndo();
-    // Offset to match camera position in world space
-    const shifted = pendingPatternObjects.map(o => ({
-      ...o, 
-      points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))
-    }));
+    const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))}));
     state.objects.push(...shifted);
-    
     const dataURL = cameraPreview.toDataURL();
-    const floatingPreview = document.getElementById('floating-preview');
-    const imgWrap = document.getElementById('preview-img-wrap');
+    const floatingPreview = document.getElementById('floating-preview'), imgWrap = document.getElementById('preview-img-wrap');
     floatingPreview.style.display = 'flex';
     imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
-    
-    updateTraceFilter();
-    render(); 
-    updateUI();
-    showToast('패턴이 캔버스에 적용되었습니다.');
+    pendingPatternObjects = []; // Prevent duplicates
+    updateTraceFilter(); render(); updateUI();
+    showToast('패턴이 적용되었습니다.');
   }
   stopCamera();
 });
