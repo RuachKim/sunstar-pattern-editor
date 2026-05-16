@@ -23,7 +23,6 @@
     
     <div class="tool-divider"></div>
     
-    <!-- 스티치 통합 도구 -->
     <div class="stitch-tool-wrap">
       <button class="tool-btn" id="stitch-master"><span>〰</span><span class="tooltip">스티치</span></button>
       <div class="stitch-sub-menu">
@@ -71,26 +70,16 @@
     </div>
   </div>
 
-  <!-- 왼쪽 패널 (트레이스 및 패턴) -->
+  <!-- 왼쪽 패널 -->
   <aside id="left-panel">
     <div class="panel-section">
-      <div class="panel-title">트레이스 설정</div>
+      <div class="panel-title">배경 이미지 설정</div>
       <div class="trace-controls">
-        <div class="control-row">
-          <label>밝기</label>
-          <input type="range" id="trace-brightness" min="0" max="200" value="100">
-        </div>
-        <div class="control-row">
-          <label>대비</label>
-          <input type="range" id="trace-contrast" min="0" max="200" value="100">
-        </div>
-        <div class="control-row">
-          <label>투명도</label>
-          <input type="range" id="trace-opacity" min="0" max="100" value="50">
-        </div>
+        <div class="control-row"><label>밝기</label><input type="range" id="trace-brightness" min="0" max="200" value="100"></div>
+        <div class="control-row"><label>대비</label><input type="range" id="trace-contrast" min="0" max="200" value="100"></div>
+        <div class="control-row"><label>투명도</label><input type="range" id="trace-opacity" min="0" max="100" value="50"></div>
       </div>
     </div>
-    
     <div class="panel-section" style="border-top: 1px solid var(--border);">
       <div class="panel-title">자수 패턴 라이브러리</div>
       <div class="pattern-grid">
@@ -105,7 +94,7 @@
     </div>
   </aside>
 
-  <!-- 캔버스 영역 -->
+  <!-- 캔버스 -->
   <main id="canvas-wrap">
     <canvas id="c"></canvas>
     <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:320px; height:240px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.15); z-index:40; display: none; flex-direction: column;">
@@ -129,7 +118,6 @@
       </div>
       <input type="file" id="inp-file" accept="image/*" style="display: none;">
     </div>
-    
     <div class="prop-group">
       <div class="panel-title">스티치 기법</div>
       <div class="stitch-tech-grid">
@@ -140,30 +128,22 @@
         <button class="stitch-tech-btn" data-stitch="knot">매듭 (Knot)</button>
       </div>
     </div>
-
     <div class="prop-group">
       <div class="panel-title">상세 설정</div>
+      <div class="prop-label">패턴 크기 (Scale) <span id="val-scale">100%</span></div>
+      <div class="slider-row"><input type="range" id="sl-scale" min="10" max="300" step="5" value="100"></div>
       <div class="prop-label">밀도 (Density) <span id="val-density">2.0</span>mm</div>
-      <div class="slider-row">
-        <input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2">
-      </div>
+      <div class="slider-row"><input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2"></div>
       <div class="prop-label">각도 (Angle) <span id="val-angle">0°</span></div>
-      <div class="slider-row">
-        <input type="range" id="sl-angle" min="0" max="180" step="15" value="0">
-      </div>
+      <div class="slider-row"><input type="range" id="sl-angle" min="0" max="180" step="15" value="0"></div>
       <div class="prop-label">색상 (Color)</div>
-      <div class="color-row">
-        <input type="color" id="inp-color" value="#4361ee">
-        <span class="slider-val" id="val-color">#4361ee</span>
-      </div>
+      <div class="color-row"><input type="color" id="inp-color" value="#4361ee"><span class="slider-val" id="val-color">#4361ee</span></div>
     </div>
-
     <div class="bottom-actions" style="margin-top: auto; padding-top: 20px;">
       <button class="btn-filled" id="btn-export" style="width: 100%;">💾 DST 저장</button>
     </div>
   </aside>
 
-  <!-- 상태 바 -->
   <footer id="statusbar">
     <span id="status-tool">도구: 선택</span>
     <span id="status-objs">오브젝트: 0</span>
@@ -173,13 +153,7 @@
     <span style="margin-left:auto; opacity: 0.7;">스크롤: 확대/축소 | 우클릭 드래그: 이동</span>
   </footer>
 
-  <!-- 토스트 알림 -->
   <div id="toast-container" style="position:fixed; top:24px; right:24px; z-index:10000; display:flex; flex-direction:column; gap:12px; pointer-events:none;"></div>
-</div>
-
-<script type="module" src="js/app.js"></script>
-</body>
-</html>container" style="position:fixed; top:24px; right:24px; z-index:10000; display:flex; flex-direction:column; gap:12px; pointer-events:none;"></div>
 </div>
 
 <script type="module" src="js/app.js"></script>
