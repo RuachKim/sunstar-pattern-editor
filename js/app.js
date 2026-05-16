@@ -113,7 +113,7 @@ function drawStitches(pts, color, stitchType = 'running', density = 2, angle = 0
   const stitches = StitchEngine.objectToStitches(tempObj, state.maxStitchLen);
   ctx.save();
   if (!isPreview) { ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'; ctx.shadowBlur = 2 * Math.max(1, state.cam.z); ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1; }
-  ctx.strokeStyle = color; ctx.lineWidth = isPreview ? 1.5 : (1.8 * Math.max(0.5, state.cam.z * 0.8)); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = color; ctx.lineWidth = isPreview ? 1.0 : (1.8 * Math.max(0.5, state.cam.z * 0.8)); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.beginPath();
   if (stitches.length > 0) {
     let sp = w2s(stitches[0].x, stitches[0].y); ctx.moveTo(sp.x, sp.y);
@@ -249,8 +249,10 @@ cv.addEventListener('pointermove', e => {
       if (drag.origCtrl) state.objects[state.selectedIdx].controlPoints.forEach((p, i) => { p.x = drag.origCtrl[i].x + dx; p.y = drag.origCtrl[i].y + dy; });
     } else {
       const o = state.objects[state.selectedIdx];
-      if (o.controlPoints) { o.controlPoints[drag.nodeIdx].x = tempPos.x; o.controlPoints[drag.nodeIdx].y = tempPos.y; if (o.type === 'arch') o.points = getArch(o.controlPoints[0], o.controlPoints[1], o.controlPoints[2]); }
-      else o.points[drag.nodeIdx].x = tempPos.x; o.points[drag.nodeIdx].y = tempPos.y;
+      if (o.controlPoints) { 
+        o.controlPoints[drag.nodeIdx].x = tempPos.x; o.controlPoints[drag.nodeIdx].y = tempPos.y; 
+        if (o.type === 'arch') o.points = getArch(o.controlPoints[0], o.controlPoints[1], o.controlPoints[2]); 
+      } else { o.points[drag.nodeIdx].x = tempPos.x; o.points[drag.nodeIdx].y = tempPos.y; }
     }
     render();
   } else if (drawStart) { drawStart.ex = tempPos.x; drawStart.ey = tempPos.y; render(); }
@@ -340,7 +342,6 @@ function rdp(pts, e) {
   return [f, l];
 }
 
-// ─── Camera & Image Processing ───
 const btnCamera = document.getElementById('btn-camera'), cameraModal = document.getElementById('camera-modal'), cameraVideo = document.getElementById('camera-video'), cameraPreview = document.getElementById('camera-preview'), cameraControls = document.getElementById('camera-controls'), cameraPreviewControls = document.getElementById('camera-preview-controls'), btnCapture = document.getElementById('btn-capture'), btnCloseCamera = document.getElementById('btn-close-camera'), btnApplyPattern = document.getElementById('btn-apply-pattern'), btnRecapture = document.getElementById('btn-recapture');
 let cameraStream = null;
 
@@ -353,12 +354,14 @@ function processImage(imgSource, isVideo = false) {
   const vH = isVideo ? imgSource.videoHeight : imgSource.height;
   if (!vW || !vH) return false;
   const roiW = vW * 0.8, roiH = vH * 0.8, roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
-  const maxDim = 400; const scale = Math.min(maxDim / roiW, maxDim / roiH);
+  const maxDim = 600; const scale = Math.min(maxDim / roiW, maxDim / roiH);
   const pw = Math.floor(roiW * scale), ph = Math.floor(roiH * scale);
   const canvas = document.createElement('canvas'); canvas.width = pw; canvas.height = ph;
   const tCtx = canvas.getContext('2d'); tCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, pw, ph);
   cameraPreview.width = roiW; cameraPreview.height = roiH;
-  const pCtx = cameraPreview.getContext('2d'); pCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
+  const pCtx = cameraPreview.getContext('2d');
+  pCtx.clearRect(0,0,roiW,roiH);
+  pCtx.globalAlpha = 0.6; pCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH); pCtx.globalAlpha = 1.0;
   const imgData = tCtx.getImageData(0, 0, pw, ph), data = imgData.data, gray = new Uint8Array(pw * ph);
   for (let i = 0; i < pw * ph; i++) { gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2]; }
   const S = Math.floor(pw / 16), intImg = new Uint32Array(pw * ph);
@@ -380,7 +383,8 @@ function processImage(imgSource, isVideo = false) {
     const optimized = rdp(path, 4.0);
     if (optimized.length > 2) {
       pendingPatternObjects.push({ id: uid(), type: 'auto', points: optimized, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '추출 패턴' });
-      pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round'; pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4; pCtx.beginPath();
+      pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 2; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
+      pCtx.beginPath();
       optimized.forEach((p, i) => { const sx = p.x + roiW/2, sy = p.y + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
       pCtx.stroke(); pCtx.restore();
     }
@@ -388,23 +392,21 @@ function processImage(imgSource, isVideo = false) {
   return pendingPatternObjects.length > 0;
 }
 
-btnCapture.addEventListener('click', () => { if (processImage(cameraVideo, true)) { cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; } else showToast('패턴 인식 실패. 명확하게 촬영해주세요.', 'error'); });
+btnCapture.addEventListener('click', () => { if (processImage(cameraVideo, true)) { cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; } else showToast('인식 실패.', 'error'); });
 btnRecapture.addEventListener('click', () => { cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; });
 btnApplyPattern.addEventListener('click', () => {
-  if (pendingPatternObjects.length > 0) { saveUndo(); const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})); state.objects.push(...shifted);
-    const dataURL = cameraPreview.toDataURL(); const floatingPreview = document.getElementById('floating-preview'), imgWrap = document.getElementById('preview-img-wrap');
-    floatingPreview.style.display = 'flex'; imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
-    pendingPatternObjects = []; updateTraceFilter(); render(); updateUI(); showToast('패턴이 적용되었습니다.');
+  if (pendingPatternObjects.length > 0) { 
+    saveUndo(); 
+    state.objects.push(...pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})));
+    const dataURL = cameraPreview.toDataURL(); document.getElementById('floating-preview').style.display = 'flex'; document.getElementById('preview-img-wrap').innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
+    pendingPatternObjects = []; render(); updateUI(); showToast('패턴이 적용되었습니다.');
   }
   stopCamera();
 });
 
 const btnOpenFile = document.getElementById('btn-open-file'), inpFile = document.getElementById('inp-file');
 btnOpenFile.addEventListener('click', () => inpFile.click());
-inpFile.addEventListener('change', e => {
-  const file = e.target.files[0]; if (!file) return;
-  const reader = new FileReader(); reader.onload = (event) => { const img = new Image(); img.onload = () => { cameraModal.style.display = 'flex'; cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; if (!processImage(img, false)) showToast('분석 실패.', 'error'); }; img.src = event.target.result; }; reader.readAsDataURL(file);
-});
+inpFile.addEventListener('change', e => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { const img = new Image(); img.onload = () => { cameraModal.style.display = 'flex'; cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; processImage(img, false); }; img.src = event.target.result; }; reader.readAsDataURL(file); });
 
 document.getElementById('btn-go-origin').addEventListener('click', () => { state.cam.x = 0; state.cam.y = 0; state.cam.z = 1; render(); updateUI(); showToast('원점으로 이동했습니다.'); });
 updateUI(); render();
