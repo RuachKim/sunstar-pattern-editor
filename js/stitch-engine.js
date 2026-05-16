@@ -53,7 +53,7 @@ export class StitchEngine {
   static generateSatin(obj, maxLen = 30) {
     const pts = obj.points;
     const density = obj.density || 2.0;
-    const halfW = density * 2;
+    const halfW = 4.0; // 고정된 새틴 스티치 너비 (4mm)
     const left = StitchEngine.offsetPath(pts, halfW);
     const right = StitchEngine.offsetPath(pts, -halfW);
     const interpLeft = StitchEngine.interpolatePath(left, density);

@@ -114,13 +114,34 @@ function drawStitches(pts, color, stitchType = 'running', density = 2, angle = 0
   if (!pts || pts.length < 2) return;
   const tempObj = { points: pts, stitch: stitchType, density, angle };
   const stitches = StitchEngine.objectToStitches(tempObj, state.maxStitchLen);
-  ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  
+  ctx.save();
+  ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
+  ctx.shadowBlur = 2 * Math.max(1, state.cam.z);
+  ctx.shadowOffsetX = 1;
+  ctx.shadowOffsetY = 1;
+
+  ctx.strokeStyle = color; 
+  ctx.lineWidth = 1.8 * Math.max(0.5, state.cam.z * 0.8); 
+  ctx.lineJoin = 'round'; 
+  ctx.lineCap = 'round';
+  
   ctx.beginPath();
   if (stitches.length > 0) {
     let sp = w2s(stitches[0].x, stitches[0].y); ctx.moveTo(sp.x, sp.y);
     for (let i = 1; i < stitches.length; i++) { let ep = w2s(stitches[i].x, stitches[i].y); ctx.lineTo(ep.x, ep.y); }
   }
   ctx.stroke();
+  ctx.restore();
+
+  // 바늘이 들어가는 땀(구멍)을 미세하게 표시하여 밀도/각도 변화를 실시간으로 체감할 수 있게 함
+  if (state.cam.z > 0.6 && stitches.length < 5000) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    for (let i = 0; i < stitches.length; i++) {
+      let p = w2s(stitches[i].x, stitches[i].y);
+      ctx.beginPath(); ctx.arc(p.x, p.y, 0.8 * state.cam.z, 0, Math.PI * 2); ctx.fill();
+    }
+  }
 }
 
 function drawObj(o, idx) {
