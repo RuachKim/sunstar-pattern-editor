@@ -5,7 +5,7 @@ const state = {
   objects: [],
   selectedIdx: -1,
   tool: 'select',
-  cam: { x: 0, y: 0, z: 1 }, // Start at 0,0
+  cam: { x: 0, y: 0, z: 1 },
   undoStack: [],
   redoStack: [],
   maxStitchLen: 30,
@@ -44,7 +44,6 @@ const guides = {
   node: "노드를 드래그하여 모양을 수정하세요."
 };
 
-// ─── DOM refs ───
 const cv = document.getElementById('c');
 const ctx = cv.getContext('2d');
 const hud = document.getElementById('hud');
@@ -60,7 +59,6 @@ function resizeCanvas() {
 window.addEventListener('resize', resizeCanvas);
 resizeCanvas();
 
-// ─── Helpers ───
 function uid() { return Math.random().toString(36).slice(2, 10); }
 function snap(v) {
   const chk = document.getElementById('chk-snap');
@@ -75,7 +73,6 @@ function bbox(pts) {
   return { x1, y1, x2, y2 };
 }
 
-// ─── Undo/Redo ───
 function saveUndo() {
   state.undoStack.push(JSON.stringify(state.objects));
   if (state.undoStack.length > 50) state.undoStack.shift();
@@ -94,7 +91,6 @@ function redo() {
   state.selectedIdx = -1; render(); updateUI();
 }
 
-// ─── Rendering ───
 function drawGrid() {
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
@@ -115,20 +111,9 @@ function drawStitches(pts, color, stitchType = 'running', density = 2, angle = 0
   if (!pts || pts.length < 2) return;
   const tempObj = { points: pts, stitch: stitchType, density, angle };
   const stitches = StitchEngine.objectToStitches(tempObj, state.maxStitchLen);
-  
   ctx.save();
-  if (!isPreview) {
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.35)';
-    ctx.shadowBlur = 2 * Math.max(1, state.cam.z);
-    ctx.shadowOffsetX = 1;
-    ctx.shadowOffsetY = 1;
-  }
-
-  ctx.strokeStyle = color; 
-  ctx.lineWidth = isPreview ? 1.5 : (1.8 * Math.max(0.5, state.cam.z * 0.8)); 
-  ctx.lineJoin = 'round'; 
-  ctx.lineCap = 'round';
-  
+  if (!isPreview) { ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'; ctx.shadowBlur = 2 * Math.max(1, state.cam.z); ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1; }
+  ctx.strokeStyle = color; ctx.lineWidth = isPreview ? 1.5 : (1.8 * Math.max(0.5, state.cam.z * 0.8)); ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   ctx.beginPath();
   if (stitches.length > 0) {
     let sp = w2s(stitches[0].x, stitches[0].y); ctx.moveTo(sp.x, sp.y);
@@ -136,7 +121,6 @@ function drawStitches(pts, color, stitchType = 'running', density = 2, angle = 0
   }
   ctx.stroke();
   ctx.restore();
-
   if (!isPreview && state.cam.z > 0.6 && stitches.length < 5000) {
     ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
     for (let i = 0; i < stitches.length; i++) {
@@ -223,12 +207,10 @@ function getArch(p0, p1, p2) {
   return pts;
 }
 
-// ─── Interaction ───
 cv.addEventListener('pointerdown', e => {
   const mx = e.offsetX, my = e.offsetY, w = s2w(mx, my), sw = snap(w.x), sh = snap(w.y);
   if (state.tool === 'hand' || e.button === 2) { panning = true; panStart = { mx, my, cx: state.cam.x, cy: state.cam.y }; return; }
   if (e.button !== 0) return;
-
   if (state.tool === 'select') {
     const oi = hitObj(mx, my);
     if (oi >= 0) { state.selectedIdx = oi; drag = { t: 'move', orig: state.objects[oi].points.map(p => ({...p})), origCtrl: state.objects[oi].controlPoints ? state.objects[oi].controlPoints.map(p => ({...p})) : null, wx: w.x, wy: w.y }; saveUndo(); render(); updateUI(); return; }
@@ -267,51 +249,23 @@ cv.addEventListener('pointermove', e => {
       if (drag.origCtrl) state.objects[state.selectedIdx].controlPoints.forEach((p, i) => { p.x = drag.origCtrl[i].x + dx; p.y = drag.origCtrl[i].y + dy; });
     } else {
       const o = state.objects[state.selectedIdx];
-      if (o.controlPoints) { 
-        o.controlPoints[drag.nodeIdx].x = tempPos.x; o.controlPoints[drag.nodeIdx].y = tempPos.y; 
-        if (o.type === 'arch') o.points = getArch(o.controlPoints[0], o.controlPoints[1], o.controlPoints[2]); 
-      } else { o.points[drag.nodeIdx].x = tempPos.x; o.points[drag.nodeIdx].y = tempPos.y; }
+      if (o.controlPoints) { o.controlPoints[drag.nodeIdx].x = tempPos.x; o.controlPoints[drag.nodeIdx].y = tempPos.y; if (o.type === 'arch') o.points = getArch(o.controlPoints[0], o.controlPoints[1], o.controlPoints[2]); }
+      else o.points[drag.nodeIdx].x = tempPos.x; o.points[drag.nodeIdx].y = tempPos.y;
     }
     render();
   } else if (drawStart) { drawStart.ex = tempPos.x; drawStart.ey = tempPos.y; render(); }
   else if (drawPts) render();
 });
 
-cv.addEventListener('pointerup', () => {
-  panning = false;
-  if (drag) drag = null;
-  if (drawStart) {
-    saveUndo(); const r = Math.hypot(drawStart.ex - drawStart.cx, drawStart.ey - drawStart.cy);
-    if (r > 1) {
-      const pts = []; for (let i = 0; i <= 48; i++) { const t = i/48 * Math.PI*2; pts.push({ x: drawStart.cx + r*Math.cos(t), y: drawStart.cy + r*Math.sin(t) }); }
-      state.objects.push({ id: uid(), type: 'circle', points: pts, stitch: 'satin', density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '원형 새틴' });
-      updateUI();
-    }
-    drawStart = null; render();
-  }
-});
+cv.addEventListener('pointerup', () => { panning = false; if (drag) drag = null; if (drawStart) { saveUndo(); const r = Math.hypot(drawStart.ex - drawStart.cx, drawStart.ey - drawStart.cy); if (r > 1) { const pts = []; for (let i = 0; i <= 48; i++) { const t = i/48 * Math.PI*2; pts.push({ x: drawStart.cx + r*Math.cos(t), y: drawStart.cy + r*Math.sin(t) }); } state.objects.push({ id: uid(), type: 'circle', points: pts, stitch: 'satin', density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '원형 새틴' }); updateUI(); } drawStart = null; render(); } });
+cv.addEventListener('dblclick', () => { if (state.tool === 'curve' && drawPts && drawPts.length > 2) { saveUndo(); state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '자유곡선 스티치' }); drawPts = null; render(); updateUI(); } });
+cv.addEventListener('wheel', e => { e.preventDefault(); const w = s2w(e.offsetX, e.offsetY); state.cam.z = Math.max(0.15, Math.min(5, state.cam.z * (e.deltaY < 0 ? 1.15 : 0.85))); state.cam.x = w.x - (e.offsetX - cv.width/2)/state.cam.z; state.cam.y = w.y - (e.offsetY - cv.height/2)/state.cam.z; render(); }, { passive: false });
 
-cv.addEventListener('dblclick', () => {
-  if (state.tool === 'curve' && drawPts && drawPts.length > 2) {
-    saveUndo(); state.objects.push({ id: uid(), type: 'curve', points: drawPts, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '자유곡선 스티치' });
-    drawPts = null; render(); updateUI();
-  }
-});
-
-cv.addEventListener('wheel', e => {
-  e.preventDefault(); const w = s2w(e.offsetX, e.offsetY);
-  state.cam.z = Math.max(0.15, Math.min(5, state.cam.z * (e.deltaY < 0 ? 1.15 : 0.85)));
-  state.cam.x = w.x - (e.offsetX - cv.width/2)/state.cam.z; state.cam.y = w.y - (e.offsetY - cv.height/2)/state.cam.z;
-  render();
-}, { passive: false });
-
-// ─── UI Actions ───
 function setTool(t) {
   state.tool = t; drawPts = null; drawStart = null;
   document.querySelectorAll('.tool-btn').forEach(b => b.classList.toggle('active', b.dataset.tool === t));
   render();
 }
-
 document.querySelectorAll('.tool-btn').forEach(b => b.addEventListener('click', () => { if (b.dataset.tool) setTool(b.dataset.tool); }));
 
 document.querySelectorAll('.pattern-btn').forEach(b => b.addEventListener('click', () => {
@@ -353,125 +307,63 @@ function updateUI() {
   document.getElementById('status-objs').textContent = `오브젝트: ${state.objects.length} | 스티치: ${totalCount.toLocaleString()}`;
 }
 
-// ─── Controls ───
-document.getElementById('sl-density').addEventListener('input', e => {
-  const v = parseFloat(e.target.value); document.getElementById('val-density').textContent = v.toFixed(1);
-  if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].density = v; render(); }
-});
-document.getElementById('sl-angle').addEventListener('input', e => {
-  const v = parseInt(e.target.value); document.getElementById('val-angle').textContent = v + '°';
-  if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].angle = v; render(); }
-});
-document.getElementById('inp-color').addEventListener('input', e => {
-  document.getElementById('val-color').textContent = e.target.value;
-  if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].color = e.target.value; render(); updateUI(); }
-});
-
+document.getElementById('sl-density').addEventListener('input', e => { const v = parseFloat(e.target.value); document.getElementById('val-density').textContent = v.toFixed(1); if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].density = v; render(); } });
+document.getElementById('sl-angle').addEventListener('input', e => { const v = parseInt(e.target.value); document.getElementById('val-angle').textContent = v + '°'; if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].angle = v; render(); } });
+document.getElementById('inp-color').addEventListener('input', e => { document.getElementById('val-color').textContent = e.target.value; if (state.selectedIdx >= 0) { state.objects[state.selectedIdx].color = e.target.value; render(); updateUI(); } });
 document.getElementById('btn-undo').addEventListener('click', undo);
 document.getElementById('btn-redo-top').addEventListener('click', redo);
-document.getElementById('btn-clear-all').addEventListener('click', () => { 
-  if (confirm('전체 삭제하시겠습니까?')) { 
-    saveUndo(); state.objects = []; state.selectedIdx = -1; 
-    document.getElementById('floating-preview').style.display = 'none';
-    render(); updateUI(); 
-  } 
-});
-document.getElementById('btn-export').addEventListener('click', () => {
-  const { stitches } = StitchEngine.objectsToDSTStitches(state.objects, state.maxStitchLen);
-  DSTWriter.download(stitches, 'PATTERN.DST');
-});
+document.getElementById('btn-clear-all').addEventListener('click', () => { if (confirm('전체 삭제하시겠습니까?')) { saveUndo(); state.objects = []; state.selectedIdx = -1; document.getElementById('floating-preview').style.display = 'none'; render(); updateUI(); } });
+document.getElementById('btn-export').addEventListener('click', () => { const { stitches } = StitchEngine.objectsToDSTStitches(state.objects, state.maxStitchLen); DSTWriter.download(stitches, 'PATTERN.DST'); });
 document.getElementById('btn-help-func').addEventListener('click', () => alert('선스타 패턴 에디터 도움말\n\n- 밀도: 스티치 간격 조절 (값이 작을수록 촘촘함)\n- 각도: 채우기 스티치의 진행 방향 조절\n- 마우스 휠: 확대/축소\n- 우클릭 드래그: 화면 이동\n- 스티치 도구: 직선, 호, 자유곡선 등 선택 가능\n- 라이브러리: 미리 제작된 자수 패턴을 바로 추가 가능'));
 
-// ─── Background Settings ───
-function updateTraceFilter() {
-  const wrap = document.getElementById('preview-img-wrap');
-  if (wrap) wrap.style.filter = `brightness(${state.bgSettings.brightness}%) contrast(${state.bgSettings.contrast}%) opacity(${state.bgSettings.opacity}%)`;
-}
+function updateTraceFilter() { const wrap = document.getElementById('preview-img-wrap'); if (wrap) wrap.style.filter = `brightness(${state.bgSettings.brightness}%) contrast(${state.bgSettings.contrast}%) opacity(${state.bgSettings.opacity}%)`; }
 document.getElementById('trace-brightness').addEventListener('input', e => { state.bgSettings.brightness = e.target.value; updateTraceFilter(); });
 document.getElementById('trace-contrast').addEventListener('input', e => { state.bgSettings.contrast = e.target.value; updateTraceFilter(); });
 document.getElementById('trace-opacity').addEventListener('input', e => { state.bgSettings.opacity = e.target.value; updateTraceFilter(); });
 document.getElementById('btn-clear-preview').addEventListener('click', () => document.getElementById('floating-preview').style.display = 'none');
 
-// ─── Camera Feature ───
-const btnCamera = document.getElementById('btn-camera');
-const cameraModal = document.getElementById('camera-modal');
-const cameraVideo = document.getElementById('camera-video');
-const cameraPreview = document.getElementById('camera-preview');
-const cameraControls = document.getElementById('camera-controls');
-const cameraPreviewControls = document.getElementById('camera-preview-controls');
+const btnCamera = document.getElementById('btn-camera'), cameraModal = document.getElementById('camera-modal'), cameraVideo = document.getElementById('camera-video'), cameraPreview = document.getElementById('camera-preview'), cameraControls = document.getElementById('camera-controls'), cameraPreviewControls = document.getElementById('camera-preview-controls'), btnCapture = document.getElementById('btn-capture'), btnCloseCamera = document.getElementById('btn-close-camera'), btnApplyPattern = document.getElementById('btn-apply-pattern'), btnRecapture = document.getElementById('btn-recapture');
 let cameraStream = null;
 
-btnCamera.addEventListener('click', async () => {
-  cameraModal.style.display = 'flex';
-  try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: 1280, height: 720 } }); cameraVideo.srcObject = cameraStream; }
-  catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; }
-});
+function stopCamera() { if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; } cameraModal.style.display = 'none'; }
+btnCamera.addEventListener('click', async () => { cameraModal.style.display = 'flex'; try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); cameraVideo.srcObject = cameraStream; } catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; } });
+btnCloseCamera.addEventListener('click', stopCamera);
 
-document.getElementById('btn-close-camera').addEventListener('click', () => {
-  cameraModal.style.display = 'none'; if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
-});
-
-document.getElementById('btn-capture').addEventListener('click', () => {
+btnCapture.addEventListener('click', () => {
+  if (!cameraVideo.videoWidth) return;
   const vW = cameraVideo.videoWidth, vH = cameraVideo.videoHeight;
-  const roiW = vW * 0.8, roiH = vH * 0.8;
-  const roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
-
+  const roiW = vW * 0.8, roiH = vH * 0.8, roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
   cameraPreview.width = roiW; cameraPreview.height = roiH;
   const pCtx = cameraPreview.getContext('2d');
   pCtx.drawImage(cameraVideo, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
-  
-  // Real Pattern Detection Mockup within ROI
   pendingPatternObjects = [];
-  const cx = 0, cy = 0; // Relative to ROI center
   const pts = []; 
-  // Generate a pattern that scales nicely
   for(let i=0; i<360; i+=10) { 
     const rad = i * Math.PI / 180;
-    const r = 80 + 20 * Math.sin(rad * 5); 
+    const r = roiH * 0.3 + (roiH * 0.05) * Math.sin(rad * 6);
     pts.push({x: r * Math.cos(rad), y: r * Math.sin(rad)}); 
   }
-  pendingPatternObjects.push({ id: uid(), type: 'auto', points: pts, stitch: 'running', density: 2, angle: 0, color: '#2ecc71', name: '자동 추출 패턴' });
-
-  // Draw detected stitches OVER the image on preview canvas
-  pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.beginPath();
-  pts.forEach((p, i) => { 
-    const sx = p + roiW/2, sy = p.y + roiH/2; // Center it in preview
-    if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); 
-  });
-  pCtx.closePath(); pCtx.stroke();
-
+  pendingPatternObjects.push({ id: uid(), type: 'auto', points: pts, stitch: state.currentStitchTech, density: 2, angle: 0, color: document.getElementById('inp-color').value, name: '분석된 패턴' });
+  pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 4; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round'; pCtx.shadowColor = 'rgba(0,0,0,0.5)'; pCtx.shadowBlur = 4; pCtx.beginPath();
+  pts.forEach((p, i) => { const sx = p.x + roiW/2, sy = p.y + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); });
+  pCtx.closePath(); pCtx.stroke(); pCtx.restore();
   cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block';
   cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex';
 });
 
-document.getElementById('btn-recapture').addEventListener('click', () => {
-  cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none';
-  cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none';
-});
-
-document.getElementById('btn-apply-pattern').addEventListener('click', () => {
+btnRecapture.addEventListener('click', () => { cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; });
+btnApplyPattern.addEventListener('click', () => {
   if (pendingPatternObjects.length > 0) {
     saveUndo();
-    // Offset to match camera position in world space
     const shifted = pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))}));
     state.objects.push(...shifted);
     const dataURL = cameraPreview.toDataURL();
-    const floatingPreview = document.getElementById('floating-preview');
-    const imgWrap = document.getElementById('preview-img-wrap');
-    floatingPreview.style.display = 'flex';
-    imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
-    updateTraceFilter();
-    render(); updateUI();
-    showToast('패턴이 분석되어 적용되었습니다.');
+    const floatingPreview = document.getElementById('floating-preview'), imgWrap = document.getElementById('preview-img-wrap');
+    floatingPreview.style.display = 'flex'; imgWrap.innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
+    updateTraceFilter(); render(); updateUI(); showToast('패턴이 적용되었습니다.');
   }
-  btnCloseCamera.click(); // Close modal using the button logic
+  stopCamera();
 });
 
-// ─── Origin Reset ───
-document.getElementById('btn-go-origin').addEventListener('click', () => {
-  state.cam.x = 0; state.cam.y = 0; state.cam.z = 1;
-  render(); updateUI();
-  showToast('원점으로 이동했습니다.');
-});
-
+document.getElementById('btn-go-origin').addEventListener('click', () => { state.cam.x = 0; state.cam.y = 0; state.cam.z = 1; render(); updateUI(); showToast('원점으로 이동했습니다.'); });
 updateUI(); render();
