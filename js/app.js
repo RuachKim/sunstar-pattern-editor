@@ -10,12 +10,14 @@ const state = {
   redoStack: [],
   maxStitchLen: 30,
   currentStitchTech: 'running',
-  bgSettings: { brightness: 100, contrast: 100, opacity: 50 }
+  bgSettings: { brightness: 100, contrast: 100, opacity: 50 },
+  hoopWidthMm: 100 // 실제 자수 틀 가로 폭 (mm)
 };
 
 let drag = null, drawPts = null, drawStart = null, tempPos = null;
 let panning = false, panStart = null;
 let pendingPatternObjects = [];
+let lastRoiW = 0; // 마지막으로 처리된 이미지의 ROI 폭 (px)
 
 function showToast(message, type = 'success') {
   const container = document.getElementById('toast-container');
@@ -62,12 +64,14 @@ resizeCanvas();
 function uid() { return Math.random().toString(36).slice(2, 10); }
 function snap(v) {
   const chk = document.getElementById('chk-snap');
-  const snapVal = chk && chk.checked ? 10 : 1;
+  const snapVal = chk && chk.checked ? 1 : 0.1; // 1mm or 0.1mm
   return Math.round(v / snapVal) * snapVal;
 }
 function s2w(sx, sy) { return { x: (sx - cv.width / 2) / state.cam.z + state.cam.x, y: (sy - cv.height / 2) / state.cam.z + state.cam.y }; }
 function w2s(wx, wy) { return { x: (wx - state.cam.x) * state.cam.z + cv.width / 2, y: (wy - state.cam.y) * state.cam.z + cv.height / 2 }; }
 function bbox(pts) {
+// ... (omitted for brevity, will read first)
+
   let x1 = 1e9, y1 = 1e9, x2 = -1e9, y2 = -1e9;
   for (const p of pts) { if (p.x < x1) x1 = p.x; if (p.y < y1) y1 = p.y; if (p.x > x2) x2 = p.x; if (p.y > y2) y2 = p.y; }
   return { x1, y1, x2, y2 };
@@ -94,7 +98,7 @@ function redo() {
 function drawGrid() {
   const W = cv.width, H = cv.height;
   ctx.clearRect(0, 0, W, H);
-  const gz = 20 * state.cam.z;
+  const gz = 10 * state.cam.z; // 10mm grid
   if (gz < 5) return;
   const ox = W / 2 - state.cam.x * state.cam.z, oy = H / 2 - state.cam.y * state.cam.z;
   ctx.strokeStyle = '#f1f2f6'; ctx.lineWidth = 1;
@@ -105,11 +109,20 @@ function drawGrid() {
   const o = w2s(0, 0);
   ctx.strokeStyle = 'rgba(239,68,68,.3)'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(o.x, 0); ctx.lineTo(o.x, H); ctx.stroke();
   ctx.strokeStyle = 'rgba(16,185,129,.3)'; ctx.beginPath(); ctx.moveTo(0, o.y); ctx.lineTo(W, o.y); ctx.stroke();
+
+  // Draw Hoop Guide (100x100mm)
+  const hw = state.hoopWidthMm / 2;
+  const s1 = w2s(-hw, -hw), s2 = w2s(hw, hw);
+  ctx.strokeStyle = 'rgba(67, 97, 238, 0.4)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+  ctx.strokeRect(s1.x, s1.y, s2.x - s1.x, s2.y - s1.y);
+  ctx.setLineDash([]);
+  ctx.fillStyle = 'rgba(67, 97, 238, 0.1)';
+  ctx.fillText(`${state.hoopWidthMm}mm`, s1.x + 5, s1.y + 15);
 }
 
-function drawStitches(pts, color, stitchType = 'running', density = 2, angle = 0, isPreview = false) {
+function drawStitches(pts, color, stitchType = 'running', density = 2, angle = 0, isPreview = false, type = 'line') {
   if (!pts || pts.length < 2) return;
-  const tempObj = { points: pts, stitch: stitchType, density, angle };
+  const tempObj = { points: pts, stitch: stitchType, density, angle, type };
   const stitches = StitchEngine.objectToStitches(tempObj, state.maxStitchLen);
   ctx.save();
   if (!isPreview) { ctx.shadowColor = 'rgba(0, 0, 0, 0.35)'; ctx.shadowBlur = 2 * Math.max(1, state.cam.z); ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 1; }
@@ -138,7 +151,7 @@ function drawObj(o, idx) {
     for (let i = 1; i < pts.length; i++) { sp = w2s(pts[i].x, pts[i].y); ctx.lineTo(sp.x, sp.y); }
     ctx.globalAlpha = 0.1; ctx.fillStyle = c; ctx.fill(); ctx.globalAlpha = 1;
   }
-  drawStitches(pts, c, o.stitch, o.density, o.angle);
+  drawStitches(pts, c, o.stitch, o.density, o.angle, false, o.type);
   if (idx === state.selectedIdx) {
     const b = bbox(pts);
     if (state.tool === 'select') {
@@ -162,7 +175,7 @@ function render() {
   if (drawPts && drawPts.length > 0) {
     let pts = [...drawPts]; if (tempPos && state.tool !== 'circle') pts.push(tempPos);
     const color = '#2ecc71';
-    if (state.tool === 'line' || state.tool === 'curve') drawStitches(pts, color, state.currentStitchTech, 2, 0, true);
+    if (state.tool === 'line' || state.tool === 'curve') drawStitches(pts, color, state.currentStitchTech, 2, 0, true, state.tool);
     else if (state.tool === 'arch') {
       if (drawPts.length === 1 && tempPos) {
         let p0 = w2s(drawPts[0].x, drawPts[0].y), p1 = w2s(tempPos.x, tempPos.y);
@@ -240,7 +253,7 @@ cv.addEventListener('pointerdown', e => {
 cv.addEventListener('pointermove', e => {
   const mx = e.offsetX, my = e.offsetY, w = s2w(mx, my);
   tempPos = { x: snap(w.x), y: snap(w.y) };
-  pos.textContent = `${(w.x / 20).toFixed(1)}, ${(-w.y / 20).toFixed(1)} cm`;
+  pos.textContent = `${(w.x / 10).toFixed(1)}, ${(-w.y / 10).toFixed(1)} cm (${w.x.toFixed(0)}, ${-w.y.toFixed(0)} mm)`;
   if (panning) { state.cam.x = panStart.cx - (mx - panStart.mx) / state.cam.z; state.cam.y = panStart.cy - (my - panStart.my) / state.cam.z; render(); return; }
   if (drag) {
     if (drag.t === 'move') {
@@ -364,11 +377,18 @@ function stopCamera() { if (cameraStream) { cameraStream.getTracks().forEach(t =
 btnCamera.addEventListener('click', async () => { cameraModal.style.display = 'flex'; try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); cameraVideo.srcObject = cameraStream; } catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; } });
 btnCloseCamera.addEventListener('click', stopCamera);
 
+document.getElementById('inp-hoop-width').addEventListener('change', e => {
+  const newVal = parseFloat(e.target.value) || 100;
+  state.hoopWidthMm = newVal;
+  showToast(`기준 크기가 ${newVal}mm로 설정되었습니다.`);
+});
+
 function processImage(imgSource, isVideo = false) {
-  const vW = isVideo ? imgSource.videoWidth : imgSource.width;
-  const vH = isVideo ? imgSource.videoHeight : imgSource.height;
+  const vW = isVideo ? imgSource.videoWidth : imgSource.videoWidth || imgSource.width;
+  const vH = isVideo ? imgSource.videoHeight : imgSource.videoHeight || imgSource.height;
   if (!vW || !vH) return false;
   const roiW = vW * 0.8, roiH = vH * 0.8, roiX = (vW - roiW) / 2, roiY = (vH - roiH) / 2;
+  lastRoiW = roiW;
   const maxDim = 600; const scale = Math.min(maxDim / roiW, maxDim / roiH);
   const pw = Math.floor(roiW * scale), ph = Math.floor(roiH * scale);
   const canvas = document.createElement('canvas'); canvas.width = pw; canvas.height = ph;
@@ -382,10 +402,14 @@ function processImage(imgSource, isVideo = false) {
   const S = Math.floor(pw / 16), intImg = new Uint32Array(pw * ph);
   for(let y=0; y<ph; y++) { let sumLine = 0; for(let x=0; x<pw; x++) { sumLine += gray[y*pw + x]; intImg[y*pw + x] = (y > 0 ? intImg[(y-1)*pw + x] : 0) + sumLine; } }
   const getSum = (x1, y1, x2, y2) => { x1 = Math.max(0, x1); y1 = Math.max(0, y1); x2 = Math.min(pw-1, x2); y2 = Math.min(ph-1, y2); return intImg[y2*pw + x2] - (y1>0 ? intImg[(y1-1)*pw + x2] : 0) - (x1>0 ? intImg[y2*pw + (x1-1)] : 0) + (y1>0 && x1>0 ? intImg[(y1-1)*pw + (x1-1)] : 0); };
+  
+  const mmPerPx = state.hoopWidthMm / roiW;
   const points = [], T = 0.82;
   for (let y = 2; y < ph - 2; y += 2) { for (let x = 2; x < pw - 2; x += 2) {
     const area = (Math.min(pw-1, x+S) - Math.max(0, x-S) + 1) * (Math.min(ph-1, y+S) - Math.max(0, y-S) + 1);
-    if (gray[y*pw + x] < (getSum(x-S, y-S, x+S, y+S) / area) * T) { points.push({ x: (x / scale) - roiW/2, y: (y / scale) - roiH/2, visited: false }); }
+    if (gray[y*pw + x] < (getSum(x-S, y-S, x+S, y+S) / area) * T) { 
+      points.push({ x: ((x / scale) - roiW/2) * mmPerPx, y: ((y / scale) - roiH/2) * mmPerPx, visited: false }); 
+    }
   } }
   pendingPatternObjects = [];
   if (points.length > 5) {

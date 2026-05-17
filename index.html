@@ -73,6 +73,19 @@
   <!-- 왼쪽 패널 -->
   <aside id="left-panel">
     <div class="panel-section">
+      <div class="panel-title">자수 틀(Hoop) 캘리브레이션</div>
+      <div class="control-row">
+        <label>실제 가로 폭</label>
+        <div style="display:flex; align-items:center; gap:4px;">
+          <input type="number" id="inp-hoop-width" value="100" style="width: 60px; padding: 4px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px;">
+          <span style="font-size: 12px; color: #666;">mm</span>
+        </div>
+      </div>
+      <p style="font-size: 11px; color: #636e72; margin-top: 6px; line-height: 1.4;">
+        촬영한 사진 속 자수틀의 실제 가로 길이를 입력하세요. (기본 100mm)
+      </p>
+    </div>
+    <div class="panel-section" style="border-top: 1px solid var(--border);">
       <div class="panel-title">배경 이미지 설정</div>
       <div class="trace-controls">
         <div class="control-row"><label>밝기</label><input type="range" id="trace-brightness" min="0" max="200" value="100"></div>

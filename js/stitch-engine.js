@@ -19,6 +19,40 @@ export class StitchEngine {
     return result;
   }
 
+  static getCatmullRomPoint(p0, p1, p2, p3, t) {
+    const v0 = (p2.x - p0.x) * 0.5;
+    const v1 = (p3.x - p1.x) * 0.5;
+    const t2 = t * t;
+    const t3 = t * t2;
+    const x = (2 * p1.x - 2 * p2.x + v0 + v1) * t3 + (-3 * p1.x + 3 * p2.x - 2 * v0 - v1) * t2 + v0 * t + p1.x;
+
+    const w0 = (p2.y - p0.y) * 0.5;
+    const w1 = (p3.y - p1.y) * 0.5;
+    const y = (2 * p1.y - 2 * p2.y + w0 + w1) * t3 + (-3 * p1.y + 3 * p2.y - 2 * w0 - w1) * t2 + w0 * t + p1.y;
+
+    return { x, y };
+  }
+
+  static interpolateSpline(pts, step) {
+    if (pts.length < 2) return [...pts];
+    if (pts.length < 3) return StitchEngine.interpolatePath(pts, step);
+
+    const result = [];
+    const extended = [pts[0], ...pts, pts[pts.length - 1]];
+
+    for (let i = 1; i < extended.length - 2; i++) {
+      const p0 = extended[i - 1], p1 = extended[i], p2 = extended[i + 1], p3 = extended[i + 2];
+      const d = StitchEngine.dist(p1, p2);
+      if (d < 0.01) continue;
+      const n = Math.max(1, Math.ceil(d / step));
+      for (let j = 0; j < n; j++) {
+        result.push(StitchEngine.getCatmullRomPoint(p0, p1, p2, p3, j / n));
+      }
+    }
+    result.push(pts[pts.length - 1]);
+    return result;
+  }
+
   static offsetPath(pts, offset) {
     if (pts.length < 2) return [...pts];
     const result = [];
@@ -47,6 +81,9 @@ export class StitchEngine {
   // ─── Stitch Generators ───
 
   static generateRunning(obj, maxLen = 30) {
+    if (obj.type === 'curve') {
+      return StitchEngine.interpolateSpline(obj.points, maxLen / 10.0);
+    }
     return StitchEngine.interpolatePath(obj.points, maxLen / 10.0);
   }
 
@@ -54,8 +91,14 @@ export class StitchEngine {
     const pts = obj.points;
     const density = obj.density || 2.0;
     const halfW = 4.0; // 고정된 새틴 스티치 너비 (4mm)
-    const left = StitchEngine.offsetPath(pts, halfW);
-    const right = StitchEngine.offsetPath(pts, -halfW);
+    
+    let path = pts;
+    if (obj.type === 'curve') {
+      path = StitchEngine.interpolateSpline(pts, 1.0); // Smooth base path first
+    }
+    
+    const left = StitchEngine.offsetPath(path, halfW);
+    const right = StitchEngine.offsetPath(path, -halfW);
     const interpLeft = StitchEngine.interpolatePath(left, density);
     const interpRight = StitchEngine.interpolatePath(right, density);
     const n = Math.min(interpLeft.length, interpRight.length);
