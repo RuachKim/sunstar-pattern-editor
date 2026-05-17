@@ -81,10 +81,11 @@ export class StitchEngine {
   // ─── Stitch Generators ───
 
   static generateRunning(obj, maxLen = 30) {
+    const step = 0.4; // 0.4mm per stitch for smoothness
     if (obj.type === 'curve') {
-      return StitchEngine.interpolateSpline(obj.points, maxLen / 10.0);
+      return StitchEngine.interpolateSpline(obj.points, step);
     }
-    return StitchEngine.interpolatePath(obj.points, maxLen / 10.0);
+    return StitchEngine.interpolatePath(obj.points, step);
   }
 
   static generateSatin(obj, maxLen = 30) {
@@ -94,7 +95,7 @@ export class StitchEngine {
     
     let path = pts;
     if (obj.type === 'curve') {
-      path = StitchEngine.interpolateSpline(pts, 1.0); // Smooth base path first
+      path = StitchEngine.interpolateSpline(pts, 0.4); // Smooth base path first
     }
     
     const left = StitchEngine.offsetPath(path, halfW);
@@ -137,7 +138,7 @@ export class StitchEngine {
       for (let i = 0; i < intersections.length - 1; i += 2) {
         let s = intersections[i], e = intersections[i + 1];
         if (row % 2 === 1) [s, e] = [e, s];
-        result.push(...StitchEngine.interpolatePath([s, e], maxLen / 10.0));
+        result.push(...StitchEngine.interpolatePath([s, e], 0.4));
       }
       offset += density; row++;
     }
