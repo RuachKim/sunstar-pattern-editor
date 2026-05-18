@@ -421,6 +421,9 @@ function chaikin(pts, iterations = 1) {
   return result;
 }
 
+let lastOriginalDataURL = null;
+let lastOverlaidDataURL = null;
+
 function processImage(imgSource, isVideo = false) {
   const vW = isVideo ? imgSource.videoWidth : imgSource.videoWidth || imgSource.width;
   const vH = isVideo ? imgSource.videoHeight : imgSource.videoHeight || imgSource.height;
@@ -431,11 +434,17 @@ function processImage(imgSource, isVideo = false) {
   const pw = Math.floor(roiW * scale), ph = Math.floor(roiH * scale);
   const canvas = document.createElement('canvas'); canvas.width = pw; canvas.height = ph;
   const tCtx = canvas.getContext('2d'); tCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, pw, ph);
+  
   cameraPreview.width = roiW; cameraPreview.height = roiH;
   const pCtx = cameraPreview.getContext('2d');
-  
+
+  // 1. 원본 레이어 생성 (필터 없는 깨끗한 버전)
   pCtx.clearRect(0,0,roiW,roiH);
-  // 사진 원본을 더 어둡고 대비를 높여 스티치가 압도적으로 잘 보이게 함
+  pCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
+  lastOriginalDataURL = cameraPreview.toDataURL();
+
+  // 2. 가공 레이어 생성 (필터 적용 + 스티치 오버레이)
+  pCtx.clearRect(0,0,roiW,roiH);
   pCtx.filter = 'brightness(0.4) contrast(1.4) grayscale(0.5)';
   pCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
   pCtx.filter = 'none';
@@ -454,8 +463,8 @@ function processImage(imgSource, isVideo = false) {
       points.push({ x: ((x / scale) - roiW/2) * mmPerPx, y: ((y / scale) - roiH/2) * mmPerPx, visited: false }); 
     }
   } }
-  pendingPatternObjects = [];
   
+  pendingPatternObjects = [];
   const currentRDP = parseFloat(document.getElementById('cam-sl-rdp').value) || 0.6;
   const currentRes = parseFloat(document.getElementById('cam-sl-res').value) || 0.4;
 
@@ -473,15 +482,13 @@ function processImage(imgSource, isVideo = false) {
         for (let j = 0; j < cluster.length; j++) { if (!cluster[j].visited) { const d = Math.hypot(cluster[j].x - curr.x, cluster[j].y - curr.y); if (d < minDist) { minDist = d; bestIdx = j; } } }
         if (bestIdx !== -1) { cluster[bestIdx].visited = true; curr = cluster[bestIdx]; path.push(curr); }
       }
-      // RDP로 최적화 후 Chaikin 스무딩을 적용하여 호(Arch)를 더 부드럽게 표현
       let optimized = rdp(path, currentRDP);
       if (optimized.length > 2) {
-        optimized = chaikin(optimized, 2); // 2단계 스무딩
+        optimized = chaikin(optimized, 2);
         pendingPatternObjects.push({ id: uid(), type: 'curve', points: optimized, stitch: state.currentStitchTech, density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: `추출 패턴 ${idx + 1}` }); 
       }
     });
     
-    // 추출된 패턴을 실제 스티치처럼 겹쳐서 보여줌
     pCtx.save();
     pCtx.shadowColor = 'rgba(0, 255, 100, 0.8)';
     pCtx.shadowBlur = 10;
@@ -491,8 +498,6 @@ function processImage(imgSource, isVideo = false) {
     pendingPatternObjects.forEach(obj => {
       const stitches = StitchEngine.objectToStitches(obj, currentRes);
       if (stitches.length < 2) return;
-      
-      // 스티치 라인 (형광색으로 더 잘 보이게)
       pCtx.strokeStyle = '#00ff88';
       pCtx.lineWidth = 4;
       pCtx.beginPath();
@@ -501,8 +506,6 @@ function processImage(imgSource, isVideo = false) {
         if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy);
       });
       pCtx.stroke();
-      
-      // 바늘 구멍(노드) 표현
       pCtx.fillStyle = '#ffffff';
       pCtx.shadowBlur = 0;
       stitches.forEach(p => {
@@ -511,28 +514,66 @@ function processImage(imgSource, isVideo = false) {
       });
     });
     pCtx.restore();
+    lastOverlaidDataURL = cameraPreview.toDataURL();
   }
+  
+  updateFloatingPreview();
   return pendingPatternObjects.length > 0;
 }
 
-btnCapture.addEventListener('click', () => { 
-  lastCapturedSource = cameraVideo;
-  if (processImage(cameraVideo, true)) { cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; } else showToast('인식 실패.', 'error'); 
+function updateFloatingPreview() {
+  const wrap = document.getElementById('preview-img-wrap');
+  if (!lastOriginalDataURL || !lastOverlaidDataURL) return;
+  
+  const isSideBySide = document.getElementById('btn-side-side').classList.contains('active');
+  const opacity = document.getElementById('preview-opacity').value / 100;
+
+  if (isSideBySide) {
+    wrap.innerHTML = `
+      <div style="display:flex; width:100%; height:100%;">
+        <div style="flex:1; border-right:1px solid #fff; position:relative; overflow:hidden;">
+          <img src="${lastOriginalDataURL}" style="width:100%; height:100%; object-fit:contain;">
+          <div style="position:absolute; top:4px; left:4px; background:rgba(0,0,0,0.5); color:#fff; font-size:9px; padding:2px 4px; border-radius:2px;">원본</div>
+        </div>
+        <div style="flex:1; position:relative; overflow:hidden;">
+          <img src="${lastOverlaidDataURL}" style="width:100%; height:100%; object-fit:contain;">
+          <div style="position:absolute; top:4px; left:4px; background:rgba(0,0,0,0.5); color:#fff; font-size:9px; padding:2px 4px; border-radius:2px;">패턴</div>
+        </div>
+      </div>
+    `;
+    document.getElementById('preview-footer').style.display = 'none';
+  } else {
+    wrap.innerHTML = `
+      <img src="${lastOriginalDataURL}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain;">
+      <img id="preview-top-layer" src="${lastOverlaidDataURL}" style="position:absolute; top:0; left:0; width:100%; height:100%; object-fit:contain; opacity:${opacity}; transition: opacity 0.1s;">
+    `;
+    document.getElementById('preview-footer').style.display = 'flex';
+    
+    // 호버 이벤트 추가 (비교를 위해 일시적으로 패턴 가림)
+    wrap.addEventListener('mouseenter', () => { document.getElementById('preview-top-layer').style.opacity = '0'; });
+    wrap.addEventListener('mouseleave', () => { document.getElementById('preview-top-layer').style.opacity = document.getElementById('preview-opacity').value / 100; });
+  }
+}
+
+document.getElementById('preview-opacity').addEventListener('input', (e) => {
+  const layer = document.getElementById('preview-top-layer');
+  if (layer) layer.style.opacity = e.target.value / 100;
 });
-btnRecapture.addEventListener('click', () => { 
-  lastCapturedSource = null;
-  cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; 
+
+document.getElementById('btn-side-side').addEventListener('click', (e) => {
+  e.target.classList.toggle('active');
+  e.target.style.background = e.target.classList.contains('active') ? 'var(--accent)' : 'none';
+  e.target.style.color = e.target.classList.contains('active') ? '#fff' : 'var(--accent)';
+  updateFloatingPreview();
 });
+
 btnApplyPattern.addEventListener('click', () => {
   if (pendingPatternObjects.length > 0) { 
     const currentRes = parseFloat(document.getElementById('cam-sl-res').value) || 0.4;
     state.maxStitchLen = currentRes;
     saveUndo(); state.objects.push(...pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})));
-    const dataURL = cameraPreview.toDataURL(); 
-    const previewWrap = document.getElementById('floating-preview');
-    previewWrap.style.display = 'flex'; 
-    // object-fit: contain 으로 변경하여 원본 전체가 다 보이도록 수정
-    document.getElementById('preview-img-wrap').innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:contain;">`;
+    document.getElementById('floating-preview').style.display = 'flex'; 
+    updateFloatingPreview();
     pendingPatternObjects = []; render(); updateUI(); showToast('패턴이 적용되었습니다.');
   }
   stopCamera();
