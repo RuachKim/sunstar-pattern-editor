@@ -129,12 +129,15 @@
   <!-- 캔버스 -->
   <main id="canvas-wrap">
     <canvas id="c"></canvas>
-    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:320px; height:240px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.15); z-index:40; display: none; flex-direction: column;">
+    <div id="floating-preview" style="position:absolute; top:20px; right:20px; width:320px; height:240px; background:#fff; border-radius:12px; border:1px solid var(--border); overflow:hidden; box-shadow:0 8px 32px rgba(0,0,0,0.15); z-index:40; display: none; flex-direction: column; transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);">
       <div style="padding: 8px 12px; background: #f8f9fa; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center;">
         <span style="font-size: 12px; font-weight: 600;">캡처 미리보기</span>
-        <button id="btn-clear-preview" style="background: none; border: none; cursor: pointer; color: var(--danger); font-size: 16px;">✕</button>
+        <div style="display: flex; gap: 8px; align-items: center;">
+          <button id="btn-expand-preview" style="background: none; border: none; cursor: pointer; color: var(--accent); font-size: 14px; padding: 2px 4px;">📂 크게 보기</button>
+          <button id="btn-clear-preview" style="background: none; border: none; cursor: pointer; color: var(--danger); font-size: 16px;">✕</button>
+        </div>
       </div>
-      <div id="preview-img-wrap" style="flex: 1; position: relative; background: #000; overflow: hidden;"></div>
+      <div id="preview-img-wrap" style="flex: 1; position: relative; background: #000; overflow: hidden; display: flex; align-items: center; justify-content: center;"></div>
     </div>
     <div id="hud"></div>
     <div id="pos">0, 0</div>

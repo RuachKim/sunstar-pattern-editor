@@ -528,10 +528,37 @@ btnApplyPattern.addEventListener('click', () => {
     const currentRes = parseFloat(document.getElementById('cam-sl-res').value) || 0.4;
     state.maxStitchLen = currentRes;
     saveUndo(); state.objects.push(...pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})));
-    const dataURL = cameraPreview.toDataURL(); document.getElementById('floating-preview').style.display = 'flex'; document.getElementById('preview-img-wrap').innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
+    const dataURL = cameraPreview.toDataURL(); 
+    const previewWrap = document.getElementById('floating-preview');
+    previewWrap.style.display = 'flex'; 
+    // object-fit: contain 으로 변경하여 원본 전체가 다 보이도록 수정
+    document.getElementById('preview-img-wrap').innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:contain;">`;
     pendingPatternObjects = []; render(); updateUI(); showToast('패턴이 적용되었습니다.');
   }
   stopCamera();
+});
+
+// 미리보기 화면 확대/축소 로직
+let isPreviewExpanded = false;
+document.getElementById('btn-expand-preview').addEventListener('click', (e) => {
+  const preview = document.getElementById('floating-preview');
+  isPreviewExpanded = !isPreviewExpanded;
+  if (isPreviewExpanded) {
+    preview.style.width = '80vw';
+    preview.style.height = '80vh';
+    preview.style.top = '50%';
+    preview.style.left = '50%';
+    preview.style.transform = 'translate(-50%, -50%)';
+    e.target.textContent = '📁 작게 보기';
+  } else {
+    preview.style.width = '320px';
+    preview.style.height = '240px';
+    preview.style.top = '20px';
+    preview.style.left = 'auto';
+    preview.style.right = '20px';
+    preview.style.transform = 'none';
+    e.target.textContent = '📂 크게 보기';
+  }
 });
 
 const btnOpenFile = document.getElementById('btn-open-file'), inpFile = document.getElementById('inp-file');
