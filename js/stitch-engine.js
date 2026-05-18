@@ -80,22 +80,23 @@ export class StitchEngine {
 
   // ─── Stitch Generators ───
 
-  static generateRunning(obj, maxLen = 30) {
-    const step = 0.4; // 0.4mm per stitch for smoothness
-    if (obj.type === 'curve') {
+  static generateRunning(obj, maxLen = 0.4) {
+    const step = Math.max(0.1, maxLen);
+    if (obj.type === 'curve' || obj.type === 'arch') {
       return StitchEngine.interpolateSpline(obj.points, step);
     }
     return StitchEngine.interpolatePath(obj.points, step);
   }
 
-  static generateSatin(obj, maxLen = 30) {
+  static generateSatin(obj, maxLen = 0.4) {
     const pts = obj.points;
     const density = obj.density || 2.0;
+    const step = Math.max(0.1, maxLen);
     const halfW = 4.0; // 고정된 새틴 스티치 너비 (4mm)
     
     let path = pts;
-    if (obj.type === 'curve') {
-      path = StitchEngine.interpolateSpline(pts, 0.4); // Smooth base path first
+    if (obj.type === 'curve' || obj.type === 'arch') {
+      path = StitchEngine.interpolateSpline(pts, step); // Smooth base path first
     }
     
     const left = StitchEngine.offsetPath(path, halfW);
@@ -111,10 +112,11 @@ export class StitchEngine {
     return result;
   }
 
-  static generateFill(obj, maxLen = 30) {
+  static generateFill(obj, maxLen = 0.4) {
     const pts = obj.points;
     if (pts.length < 3) return StitchEngine.generateRunning(obj, maxLen);
     const density = obj.density || 2.0;
+    const step = Math.max(0.1, maxLen);
     const angle = ((obj.angle || 0) * Math.PI) / 180;
     const { x1, y1, x2, y2 } = StitchEngine.bbox(pts);
     const cx = (x1 + x2) / 2, cy = (y1 + y2) / 2;
@@ -138,7 +140,7 @@ export class StitchEngine {
       for (let i = 0; i < intersections.length - 1; i += 2) {
         let s = intersections[i], e = intersections[i + 1];
         if (row % 2 === 1) [s, e] = [e, s];
-        result.push(...StitchEngine.interpolatePath([s, e], 0.4));
+        result.push(...StitchEngine.interpolatePath([s, e], step));
       }
       offset += density; row++;
     }

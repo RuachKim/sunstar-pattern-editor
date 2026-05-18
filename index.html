@@ -64,9 +64,28 @@
       <button id="btn-capture" class="btn-top">📸 촬영하기</button>
       <button id="btn-close-camera" class="btn-top">취소</button>
     </div>
-    <div style="margin-top:30px; display:none; gap:16px;" id="camera-preview-controls">
-      <button id="btn-apply-pattern" class="btn-top" style="background: var(--accent); color: #fff;">✨ 패턴 적용</button>
-      <button id="btn-recapture" class="btn-top">🔄 다시 촬영</button>
+    <div style="margin-top:30px; display:none; gap:16px; flex-direction:column; align-items:center;" id="camera-preview-controls">
+      <div style="display:flex; gap:20px; background:rgba(255,255,255,0.1); padding:15px 25px; border-radius:15px; backdrop-filter:blur(10px); margin-bottom:10px; border:1px solid rgba(255,255,255,0.2);">
+        <div style="display:flex; flex-direction:column; gap:5px;">
+          <label style="color:#fff; font-size:12px; opacity:0.8;">스티치 길이 (Res)</label>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <input type="range" id="cam-sl-res" min="0.1" max="5.0" step="0.1" value="0.4" style="width:100px;">
+            <span id="cam-val-res" style="color:#fff; font-size:13px; font-weight:600; min-width:40px;">0.4mm</span>
+          </div>
+        </div>
+        <div style="height:35px; width:1px; background:rgba(255,255,255,0.2); margin:0 5px;"></div>
+        <div style="display:flex; flex-direction:column; gap:5px;">
+          <label style="color:#fff; font-size:12px; opacity:0.8;">인식 정밀도 (RDP)</label>
+          <div style="display:flex; align-items:center; gap:10px;">
+            <input type="range" id="cam-sl-rdp" min="0.1" max="2.0" step="0.1" value="0.6" style="width:100px;">
+            <span id="cam-val-rdp" style="color:#fff; font-size:13px; font-weight:600; min-width:40px;">0.6</span>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:16px;">
+        <button id="btn-apply-pattern" class="btn-top" style="background: var(--accent); color: #fff; padding: 12px 30px; font-size: 16px;">✨ 패턴 적용하기</button>
+        <button id="btn-recapture" class="btn-top" style="padding: 12px 30px; font-size: 16px;">🔄 다시 촬영</button>
+      </div>
     </div>
   </div>
 
@@ -147,6 +166,8 @@
       <div class="slider-row"><input type="range" id="sl-scale" min="10" max="300" step="5" value="100"></div>
       <div class="prop-label">밀도 (Density) <span id="val-density">2.0</span>mm</div>
       <div class="slider-row"><input type="range" id="sl-density" min="0.5" max="5" step="0.5" value="2"></div>
+      <div class="prop-label">스티치 길이 (Resolution) <span id="val-res">0.4</span>mm</div>
+      <div class="slider-row"><input type="range" id="sl-res" min="0.1" max="10" step="0.1" value="0.4"></div>
       <div class="prop-label">각도 (Angle) <span id="val-angle">0°</span></div>
       <div class="slider-row"><input type="range" id="sl-angle" min="0" max="180" step="15" value="0"></div>
       <div class="prop-label">색상 (Color)</div>

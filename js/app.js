@@ -8,7 +8,7 @@ const state = {
   cam: { x: 0, y: 0, z: 1 },
   undoStack: [],
   redoStack: [],
-  maxStitchLen: 30,
+  maxStitchLen: 0.4,
   currentStitchTech: 'running',
   bgSettings: { brightness: 100, contrast: 100, opacity: 50 },
   hoopWidthMm: 100 // 실제 자수 틀 가로 폭 (mm)
@@ -182,7 +182,7 @@ function render() {
         ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.setLineDash([4, 4]);
         ctx.beginPath(); ctx.moveTo(p0.x, p0.y); ctx.lineTo(p1.x, p1.y); ctx.stroke(); ctx.setLineDash([]);
       } else if (drawPts.length === 2 && tempPos) {
-        drawStitches(getArch(drawPts[0], drawPts[1], tempPos), color, state.currentStitchTech, 2, 0, true);
+        drawStitches(getArch(drawPts[0], drawPts[1], tempPos), color, state.currentStitchTech, 2, 0, true, 'arch');
       }
     } else if (state.tool === 'rect' && pts.length > 1) {
       const rpts = [{x:pts[0].x, y:pts[0].y}, {x:tempPos.x, y:pts[0].y}, {x:tempPos.x, y:tempPos.y}, {x:pts[0].x, y:tempPos.y}, {x:pts[0].x, y:pts[0].y}];
@@ -314,6 +314,7 @@ function updateUI() {
     document.getElementById('sl-scale').value = Math.round(sel.scale * 100);
     document.getElementById('val-scale').textContent = Math.round(sel.scale * 100) + '%';
     document.getElementById('sl-density').value = sel.density; document.getElementById('val-density').textContent = sel.density.toFixed(1);
+    document.getElementById('sl-res').value = state.maxStitchLen; document.getElementById('val-res').textContent = state.maxStitchLen.toFixed(1);
     document.getElementById('sl-angle').value = sel.angle; document.getElementById('val-angle').textContent = sel.angle + '°';
     document.getElementById('inp-color').value = sel.color; document.getElementById('val-color').textContent = sel.color;
     state.currentStitchTech = sel.stitch;
@@ -322,6 +323,13 @@ function updateUI() {
   const { totalCount } = StitchEngine.objectsToDSTStitches(state.objects, state.maxStitchLen);
   document.getElementById('status-objs').textContent = `오브젝트: ${state.objects.length} | 스티치: ${totalCount.toLocaleString()}`;
 }
+
+document.getElementById('sl-res').addEventListener('input', e => {
+  const v = parseFloat(e.target.value);
+  document.getElementById('val-res').textContent = v.toFixed(1) + 'mm';
+  state.maxStitchLen = v;
+  render();
+});
 
 document.getElementById('sl-scale').addEventListener('input', e => {
   const v = parseInt(e.target.value) / 100;
@@ -372,8 +380,21 @@ function rdp(pts, e) {
 
 const btnCamera = document.getElementById('btn-camera'), cameraModal = document.getElementById('camera-modal'), cameraVideo = document.getElementById('camera-video'), cameraPreview = document.getElementById('camera-preview'), cameraControls = document.getElementById('camera-controls'), cameraPreviewControls = document.getElementById('camera-preview-controls'), btnCapture = document.getElementById('btn-capture'), btnCloseCamera = document.getElementById('btn-close-camera'), btnApplyPattern = document.getElementById('btn-apply-pattern'), btnRecapture = document.getElementById('btn-recapture');
 let cameraStream = null;
+let lastCapturedSource = null; // Store for re-processing
 
-function stopCamera() { if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; } cameraModal.style.display = 'none'; }
+document.getElementById('cam-sl-res').addEventListener('input', e => {
+  const val = parseFloat(e.target.value);
+  document.getElementById('cam-val-res').textContent = val.toFixed(1) + 'mm';
+  if (lastCapturedSource) processImage(lastCapturedSource, lastCapturedSource instanceof HTMLVideoElement);
+});
+
+document.getElementById('cam-sl-rdp').addEventListener('input', e => {
+  const val = parseFloat(e.target.value);
+  document.getElementById('cam-val-rdp').textContent = val.toFixed(1);
+  if (lastCapturedSource) processImage(lastCapturedSource, lastCapturedSource instanceof HTMLVideoElement);
+});
+
+function stopCamera() { if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; } cameraModal.style.display = 'none'; lastCapturedSource = null; }
 btnCamera.addEventListener('click', async () => { cameraModal.style.display = 'flex'; try { cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 } } }); cameraVideo.srcObject = cameraStream; } catch (err) { alert('카메라 접근 실패: ' + err.message); cameraModal.style.display = 'none'; } });
 btnCloseCamera.addEventListener('click', stopCamera);
 
@@ -382,6 +403,23 @@ document.getElementById('inp-hoop-width').addEventListener('change', e => {
   state.hoopWidthMm = newVal;
   showToast(`기준 크기가 ${newVal}mm로 설정되었습니다.`);
 });
+
+// Chaikin smoothing function to improve arch/curve rendering
+function chaikin(pts, iterations = 1) {
+  if (pts.length < 3) return pts;
+  let result = pts;
+  for (let k = 0; k < iterations; k++) {
+    const next = [result[0]];
+    for (let i = 0; i < result.length - 1; i++) {
+      const p1 = result[i], p2 = result[i+1];
+      next.push({ x: 0.75 * p1.x + 0.25 * p2.x, y: 0.75 * p1.y + 0.25 * p2.y });
+      next.push({ x: 0.25 * p1.x + 0.75 * p2.x, y: 0.25 * p1.y + 0.75 * p2.y });
+    }
+    next.push(result[result.length - 1]);
+    result = next;
+  }
+  return result;
+}
 
 function processImage(imgSource, isVideo = false) {
   const vW = isVideo ? imgSource.videoWidth : imgSource.videoWidth || imgSource.width;
@@ -395,8 +433,13 @@ function processImage(imgSource, isVideo = false) {
   const tCtx = canvas.getContext('2d'); tCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, pw, ph);
   cameraPreview.width = roiW; cameraPreview.height = roiH;
   const pCtx = cameraPreview.getContext('2d');
+  
   pCtx.clearRect(0,0,roiW,roiH);
-  pCtx.globalAlpha = 0.6; pCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH); pCtx.globalAlpha = 1.0;
+  // 사진 원본을 더 어둡고 대비를 높여 스티치가 압도적으로 잘 보이게 함
+  pCtx.filter = 'brightness(0.4) contrast(1.4) grayscale(0.5)';
+  pCtx.drawImage(imgSource, roiX, roiY, roiW, roiH, 0, 0, roiW, roiH);
+  pCtx.filter = 'none';
+
   const imgData = tCtx.getImageData(0, 0, pw, ph), data = imgData.data, gray = new Uint8Array(pw * ph);
   for (let i = 0; i < pw * ph; i++) { gray[i] = 0.299 * data[i*4] + 0.587 * data[i*4+1] + 0.114 * data[i*4+2]; }
   const S = Math.floor(pw / 16), intImg = new Uint32Array(pw * ph);
@@ -412,6 +455,10 @@ function processImage(imgSource, isVideo = false) {
     }
   } }
   pendingPatternObjects = [];
+  
+  const currentRDP = parseFloat(document.getElementById('cam-sl-rdp').value) || 0.6;
+  const currentRes = parseFloat(document.getElementById('cam-sl-res').value) || 0.4;
+
   if (points.length > 5) {
     const clusters = []; let remaining = [...points];
     while (remaining.length > 0) {
@@ -426,20 +473,61 @@ function processImage(imgSource, isVideo = false) {
         for (let j = 0; j < cluster.length; j++) { if (!cluster[j].visited) { const d = Math.hypot(cluster[j].x - curr.x, cluster[j].y - curr.y); if (d < minDist) { minDist = d; bestIdx = j; } } }
         if (bestIdx !== -1) { cluster[bestIdx].visited = true; curr = cluster[bestIdx]; path.push(curr); }
       }
-      const optimized = rdp(path, 4.0);
-      if (optimized.length > 2) { pendingPatternObjects.push({ id: uid(), type: 'auto', points: optimized, stitch: state.currentStitchTech, density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: `추출 패턴 ${idx + 1}` }); }
+      // RDP로 최적화 후 Chaikin 스무딩을 적용하여 호(Arch)를 더 부드럽게 표현
+      let optimized = rdp(path, currentRDP);
+      if (optimized.length > 2) {
+        optimized = chaikin(optimized, 2); // 2단계 스무딩
+        pendingPatternObjects.push({ id: uid(), type: 'curve', points: optimized, stitch: state.currentStitchTech, density: 2, angle: 0, scale: 1.0, color: document.getElementById('inp-color').value, name: `추출 패턴 ${idx + 1}` }); 
+      }
     });
-    pCtx.save(); pCtx.strokeStyle = '#2ecc71'; pCtx.lineWidth = 1; pCtx.lineJoin = 'round'; pCtx.lineCap = 'round';
-    pendingPatternObjects.forEach(obj => { pCtx.beginPath(); obj.points.forEach((p, i) => { const sx = p.x + roiW/2, sy = p.y + roiH/2; if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy); }); pCtx.stroke(); });
+    
+    // 추출된 패턴을 실제 스티치처럼 겹쳐서 보여줌
+    pCtx.save();
+    pCtx.shadowColor = 'rgba(0, 255, 100, 0.8)';
+    pCtx.shadowBlur = 10;
+    pCtx.lineJoin = 'round';
+    pCtx.lineCap = 'round';
+    
+    pendingPatternObjects.forEach(obj => {
+      const stitches = StitchEngine.objectToStitches(obj, currentRes);
+      if (stitches.length < 2) return;
+      
+      // 스티치 라인 (형광색으로 더 잘 보이게)
+      pCtx.strokeStyle = '#00ff88';
+      pCtx.lineWidth = 4;
+      pCtx.beginPath();
+      stitches.forEach((p, i) => {
+        const sx = p.x + roiW/2, sy = p.y + roiH/2;
+        if(i===0) pCtx.moveTo(sx, sy); else pCtx.lineTo(sx, sy);
+      });
+      pCtx.stroke();
+      
+      // 바늘 구멍(노드) 표현
+      pCtx.fillStyle = '#ffffff';
+      pCtx.shadowBlur = 0;
+      stitches.forEach(p => {
+        const sx = p.x + roiW/2, sy = p.y + roiH/2;
+        pCtx.beginPath(); pCtx.arc(sx, sy, 1.5, 0, Math.PI*2); pCtx.fill();
+      });
+    });
     pCtx.restore();
   }
   return pendingPatternObjects.length > 0;
 }
 
-btnCapture.addEventListener('click', () => { if (processImage(cameraVideo, true)) { cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; } else showToast('인식 실패.', 'error'); });
-btnRecapture.addEventListener('click', () => { cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; });
+btnCapture.addEventListener('click', () => { 
+  lastCapturedSource = cameraVideo;
+  if (processImage(cameraVideo, true)) { cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; } else showToast('인식 실패.', 'error'); 
+});
+btnRecapture.addEventListener('click', () => { 
+  lastCapturedSource = null;
+  cameraVideo.style.display = 'block'; cameraPreview.style.display = 'none'; cameraControls.style.display = 'flex'; cameraPreviewControls.style.display = 'none'; 
+});
 btnApplyPattern.addEventListener('click', () => {
-  if (pendingPatternObjects.length > 0) { saveUndo(); state.objects.push(...pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})));
+  if (pendingPatternObjects.length > 0) { 
+    const currentRes = parseFloat(document.getElementById('cam-sl-res').value) || 0.4;
+    state.maxStitchLen = currentRes;
+    saveUndo(); state.objects.push(...pendingPatternObjects.map(o => ({...o, points: o.points.map(p => ({x: p.x + state.cam.x, y: p.y + state.cam.y}))})));
     const dataURL = cameraPreview.toDataURL(); document.getElementById('floating-preview').style.display = 'flex'; document.getElementById('preview-img-wrap').innerHTML = `<img src="${dataURL}" style="width:100%;height:100%;object-fit:cover;">`;
     pendingPatternObjects = []; render(); updateUI(); showToast('패턴이 적용되었습니다.');
   }
@@ -448,7 +536,19 @@ btnApplyPattern.addEventListener('click', () => {
 
 const btnOpenFile = document.getElementById('btn-open-file'), inpFile = document.getElementById('inp-file');
 btnOpenFile.addEventListener('click', () => inpFile.click());
-inpFile.addEventListener('change', e => { const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = (event) => { const img = new Image(); img.onload = () => { cameraModal.style.display = 'flex'; cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; processImage(img, false); }; img.src = event.target.result; }; reader.readAsDataURL(file); });
+inpFile.addEventListener('change', e => { 
+  const file = e.target.files[0]; if (!file) return; 
+  const reader = new FileReader(); 
+  reader.onload = (event) => { 
+    const img = new Image(); 
+    img.onload = () => { 
+      lastCapturedSource = img;
+      cameraModal.style.display = 'flex'; cameraVideo.style.display = 'none'; cameraPreview.style.display = 'block'; cameraControls.style.display = 'none'; cameraPreviewControls.style.display = 'flex'; processImage(img, false); 
+    }; 
+    img.src = event.target.result; 
+  }; 
+  reader.readAsDataURL(file); 
+});
 
 document.getElementById('btn-go-origin').addEventListener('click', () => { state.cam.x = 0; state.cam.y = 0; state.cam.z = 1; render(); updateUI(); showToast('원점으로 이동했습니다.'); });
 updateUI(); render();
